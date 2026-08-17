@@ -17,3 +17,28 @@ This branding requirement is for package name / displayed name only. No need to 
 
 When naming a skill:
 - Do not mention `mikoto` any branding related information.
+
+## License
+
+All extensions and skills are respecting [LICENSE](LICENSE) file at repo root. No need to define another license file inside extension/skills folder.
+
+## Extension entry point
+
+Each Pi Extension should use this convention for entry point:
+
+```
+|- src/
+   |- index.ts
+|- index.ts 
+```
+
+`src/index.ts` is the actual entry point, and `index.ts` is a thin wrapper of the `src/index.ts`.
+
+In `package.json`, use
+```json
+"pi": {
+	"extensions": [
+		"./index.ts"
+	]
+}
+```
