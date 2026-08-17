@@ -179,7 +179,7 @@ describe("extension integration", () => {
 	it("registers the always-available sequential Codex-compatible tool", () => {
 		const { tool } = setupExtension();
 		assert.equal(tool.name, "request_user_input");
-		assert.equal(tool.label, "Mikoto Question");
+		assert.equal(tool.label, "Question");
 		assert.equal(tool.executionMode, "sequential");
 		assert.equal(
 			tool.description,

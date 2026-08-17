@@ -25,7 +25,7 @@ function makeTui(): TUI {
 describe("RequestUserInputComponent", () => {
 	it("uses the Mikoto display name for the tool call", () => {
 		const call = renderRequestCall({ questions }, plainTheme as Theme);
-		assert.match(call.render(80).join("\n"), /Mikoto Question 2 questions/);
+		assert.match(call.render(80).join("\n"), /Question 2 questions/);
 	});
 
 	it("renders Codex-like progress, automatic option, and hints within width", () => {

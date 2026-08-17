@@ -14,7 +14,7 @@ export function renderRequestCall(
 	const count = Array.isArray(args.questions) ? args.questions.length : 0;
 	const label = `${count} question${count === 1 ? "" : "s"}`;
 	return new Text(
-		`${theme.fg("toolTitle", theme.bold("Mikoto Question"))} ${theme.fg(
+		`${theme.fg("toolTitle", theme.bold("Question"))} ${theme.fg(
 			"muted",
 			label,
 		)}`,
