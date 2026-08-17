@@ -1,7 +1,7 @@
 # Mikoto Harness: An opinionated agent setup for Pi
 
 This repository contains extensions and skills for
-[Pi Coding Agent](https://pi.dev/) that serve as building blocks for the
+[Pi Coding Agent](https://pi.dev/) that serve as building blocks for my
 personal agent system *Mikoto*.
 
 ## Extension Interoperability
