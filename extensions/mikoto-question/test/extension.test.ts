@@ -47,11 +47,14 @@ type CapturedHandler = (
 	ctx: ExtensionContext,
 ) => Promise<unknown>;
 
-function setupExtension(): {
+type EmittedEvent = { channel: string; data: unknown };
+
+function setupExtension(onEmit?: (event: EmittedEvent) => void): {
 	tool: CapturedTool;
 	command: CapturedCommand;
 	handlers: Map<string, CapturedHandler>;
 	entries: Array<{ customType: string; data: unknown }>;
+	events: EmittedEvent[];
 	entryRenderer: (
 		entry: { data?: unknown },
 		options: { expanded: boolean },
@@ -69,6 +72,7 @@ function setupExtension(): {
 		| undefined;
 	const handlers = new Map<string, CapturedHandler>();
 	const entries: Array<{ customType: string; data: unknown }> = [];
+	const events: EmittedEvent[] = [];
 	const api = {
 		registerTool(value: unknown) {
 			tool = value as CapturedTool;
@@ -85,17 +89,28 @@ function setupExtension(): {
 		appendEntry(customType: string, data: unknown) {
 			entries.push({ customType, data });
 		},
+		events: {
+			emit(channel: string, data: unknown) {
+				const event = { channel, data };
+				events.push(event);
+				onEmit?.(event);
+			},
+			on() {
+				return () => {};
+			},
+		},
 	} as unknown as ExtensionAPI;
 
 	mikotoQuestion(api);
 	assert.ok(tool);
 	assert.ok(command);
 	assert.ok(entryRenderer);
-	return { tool, command, handlers, entries, entryRenderer };
+	return { tool, command, handlers, entries, events, entryRenderer };
 }
 
 function makeContext(
 	mode: "tui" | "rpc" | "json" | "print" = "tui",
+	onCustom?: () => void,
 ): { ctx: ExtensionContext } {
 	const tui = {
 		terminal: { rows: 24, columns: 100 },
@@ -115,6 +130,7 @@ function makeContext(
 				handleInput?(data: string): void;
 			},
 		): Promise<QuestionnaireOutcome> {
+			onCustom?.();
 			return new Promise((resolve) => {
 				const component = factory(
 					tui,
@@ -189,8 +205,11 @@ describe("extension integration", () => {
 	});
 
 	it("returns compact Codex response JSON after TUI selection", async () => {
-		const { tool } = setupExtension();
-		const { ctx } = makeContext();
+		let eventsAtCustom = 0;
+		const { tool, events } = setupExtension();
+		const { ctx } = makeContext("tui", () => {
+			eventsAtCustom = events.length;
+		});
 		const result = await tool.execute(
 			"call-1",
 			params,
@@ -207,19 +226,79 @@ describe("extension integration", () => {
 				confirm: { answers: ["Yes (Recommended)"] },
 			},
 		});
+		assert.equal(eventsAtCustom, 1);
+		assert.deepEqual(events, [
+			{
+				channel: "mikoto-sound:sound",
+				data: { effect: "require-attention" },
+			},
+		]);
 	});
 
 	it("rejects in non-TUI modes without opening a prompt", async () => {
-		const { tool } = setupExtension();
+		const { tool, events } = setupExtension();
 		const { ctx } = makeContext("print");
 		await assert.rejects(
 			tool.execute("call-1", params, undefined, undefined, ctx),
 			new RegExp(TUI_UNAVAILABLE_ERROR),
 		);
+		assert.deepEqual(events, []);
+	});
+
+	it("emits no sound when no questionnaire UI is opened", async () => {
+		const { tool, events } = setupExtension();
+		const { ctx } = makeContext();
+
+		await assert.rejects(
+			tool.execute(
+				"call-invalid",
+				{
+					questions: [
+						{
+							...params.questions[0]!,
+							options: [],
+						},
+					],
+				},
+				undefined,
+				undefined,
+				ctx,
+			),
+			/non-empty options/,
+		);
+
+		await tool.execute(
+			"call-empty",
+			{ questions: [] },
+			undefined,
+			undefined,
+			ctx,
+		);
+
+		const controller = new AbortController();
+		controller.abort();
+		await assert.rejects(
+			tool.execute(
+				"call-aborted",
+				params,
+				controller.signal,
+				undefined,
+				ctx,
+			),
+			/cancelled/,
+		);
+		assert.deepEqual(events, []);
 	});
 
 	it("shows UI-only DND messages, rejects calls, resets, and injects one LLM notice", async () => {
-		const { tool, command, handlers, entries, entryRenderer } = setupExtension();
+		const {
+			tool,
+			command,
+			handlers,
+			entries,
+			events,
+			entryRenderer,
+		} = setupExtension();
 		const { ctx } = makeContext();
 		await command.handler("", ctx);
 		const onEntry = entries.find(
@@ -241,6 +320,7 @@ describe("extension integration", () => {
 			tool.execute("call-1", params, undefined, undefined, ctx),
 			new RegExp(DND_UNAVAILABLE_ERROR.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
 		);
+		assert.deepEqual(events, []);
 
 		await handlers.get("turn_end")?.({}, ctx);
 		const offEntry = entries.find(

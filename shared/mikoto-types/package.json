@@ -1,0 +1,26 @@
+{
+  "name": "mikoto-types",
+  "version": "0.1.0",
+  "description": "Mikoto Types: declaration-only contracts for communication between Mikoto Pi extensions.",
+  "license": "MIT",
+  "type": "module",
+  "types": "./index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts"
+    }
+  },
+  "files": [
+    "index.d.ts",
+    "README.md"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "check": "tsc --noEmit",
+    "test": "tsc --noEmit -p test/tsconfig.json",
+    "validate": "npm run check && npm test"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.0"
+  }
+}

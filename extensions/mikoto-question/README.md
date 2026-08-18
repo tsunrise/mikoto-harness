@@ -9,13 +9,13 @@ It also provides a turn-scoped Do not disturb mode.
 Install directly from a local checkout:
 
 ```bash
-pi install /absolute/path/to/mikoto-harness/mikoto-question
+pi install /absolute/path/to/mikoto-harness/extensions/mikoto-question
 ```
 
 From the Mikoto Harness repository root, run Pi with the extension temporarily:
 
 ```bash
-pi -e ./mikoto-question
+pi -e ./extensions/mikoto-question
 ```
 
 The questionnaire requires Pi's interactive TUI. Calls in RPC, JSON, and print
@@ -83,6 +83,12 @@ submitting unanswered questions, the UI asks whether to proceed or go back.
 
 There is deliberately no timeout, countdown, or automatic resolution.
 
+When a questionnaire is about to open, Mikoto Question emits the optional
+`mikoto-sound:sound` event with the `require-attention` effect. If Mikoto Sound
+is loaded, this plays an attention sound immediately before the user-facing UI
+appears. The event is fire-and-forget, so questionnaires behave identically
+when the sound extension is absent.
+
 ## Do not disturb
 
 Toggle DND with:
@@ -118,10 +124,11 @@ after a turn ends do not alter whether that completed turn used DND.
 ## Development
 
 ```bash
+# From the Mikoto Harness root:
 npm install
-npm run check
-npm test
-# or both:
+npm run validate -w mikoto-question
+
+# Or from this package directory:
 npm run validate
 ```
 

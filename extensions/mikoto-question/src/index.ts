@@ -1,5 +1,6 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
+import type { MikotoEventEmitter } from "mikoto-types";
 import {
 	DND_AVAILABILITY_MESSAGE,
 	DND_AVAILABILITY_MESSAGE_TYPE,
@@ -38,6 +39,7 @@ const TUI_UNAVAILABLE_ERROR =
 
 export default function mikotoQuestion(pi: ExtensionAPI): void {
 	let dndState = initialDndState();
+	const events: MikotoEventEmitter = pi.events;
 
 	function persistDndState(): void {
 		pi.appendEntry(DND_STATE_ENTRY_TYPE, { ...dndState });
@@ -111,6 +113,9 @@ export default function mikotoQuestion(pi: ExtensionAPI): void {
 
 			let outcome: QuestionnaireOutcome;
 			try {
+				events.emit("mikoto-sound:sound", {
+					effect: "require-attention",
+				});
 				outcome = await ctx.ui.custom<QuestionnaireOutcome>(
 					(tui, theme, keybindings, done) => {
 						close = done;

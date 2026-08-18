@@ -4,6 +4,25 @@ This repository contains extensions and skills for
 [Pi Coding Agent](https://pi.dev/) that serve as building blocks for my
 personal agent system *Mikoto*.
 
+## Repository layout
+
+- `extensions/*` contains independently installable Pi extension packages.
+- `shared/*` contains declaration-only or runtime libraries shared by
+  extensions.
+- `skills/*` contains Pi skills.
+
+The root is a private npm workspace.
+
+```bash
+npm install
+
+# Validate one package without running the entire workspace:
+npm run validate -w mikoto-sound
+
+# Explicitly validate every package:
+npm run validate
+```
+
 ## Extension Interoperability
 
 - Some extensions in the repo require one or more extensions in the repo to be

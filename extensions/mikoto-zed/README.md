@@ -53,13 +53,13 @@ Default database locations:
 From this checkout:
 
 ```bash
-pi install /absolute/path/to/mikoto-harness/mikoto-zed
+pi install /absolute/path/to/mikoto-harness/extensions/mikoto-zed
 ```
 
 Or, from the Mikoto Harness repository root, test without installing:
 
 ```bash
-pi -e ./mikoto-zed
+pi -e ./extensions/mikoto-zed
 ```
 
 After installation, restart Pi (or run `/reload` if appropriate), open the
@@ -93,7 +93,11 @@ to the model while the extension is inactive.
 ## Development
 
 ```bash
+# From the Mikoto Harness root:
 npm install
+npm run validate -w mikoto-zed
+
+# Or from this package directory:
 npm run validate
 ```
 
