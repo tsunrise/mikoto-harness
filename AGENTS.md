@@ -54,3 +54,8 @@ In `package.json`, use
 	]
 }
 ```
+
+## Inter-extension Interaction
+
+We rely on a Pi event-bus for message passing between extensions inside this repo. Refer to `docs/inter-extensions.md`
+for more details.

@@ -112,7 +112,7 @@ export default function mikotoQuestion(pi: ExtensionAPI): void {
 			signal?.addEventListener("abort", abort, { once: true });
 
 			let outcome: QuestionnaireOutcome;
-			try {
+      try {
 				events.emit("mikoto-sound:sound", {
 					effect: "require-attention",
 				});
