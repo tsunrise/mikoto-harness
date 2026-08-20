@@ -59,3 +59,7 @@ In `package.json`, use
 
 We rely on a Pi event-bus for message passing between extensions inside this repo. Refer to `docs/inter-extensions.md`
 for more details.
+
+## Indentation
+
+Use 2 spaces as one level of code indentation.

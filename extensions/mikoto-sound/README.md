@@ -26,8 +26,8 @@ a silent no-op.
 
 | Effect | File |
 | --- | --- |
-| `require-attention` | `resources/74.mp3` |
-| `completed` | `resources/4724.mp3` |
+| `require-attention` | `resources/bip-bop-03.mp3` |
+| `completed` | `resources/bip-bop-01.mp3` |
 
 ## Configuration
 

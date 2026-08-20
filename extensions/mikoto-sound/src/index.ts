@@ -127,11 +127,11 @@ export function createBundledEffects(): Map<string, string> {
 	return new Map([
 		[
 			DEFAULT_SOUND_EFFECT,
-			fileURLToPath(new URL("../resources/74.mp3", import.meta.url)),
+			fileURLToPath(new URL("../resources/bip-bop-03.mp3", import.meta.url)),
 		],
 		[
 			COMPLETED_SOUND_EFFECT,
-			fileURLToPath(new URL("../resources/4724.mp3", import.meta.url)),
+			fileURLToPath(new URL("../resources/bip-bop-01.mp3", import.meta.url)),
 		],
 	]);
 }
