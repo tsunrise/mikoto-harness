@@ -20,8 +20,10 @@ export type MikotoEventPayload<Name extends MikotoEventName> =
 /**
  * Producer-only typed view of Pi's event bus.
  *
- * Consumers must continue accepting `unknown` and validating at runtime,
- * because extensions not using this package can emit arbitrary data.
+ * A receiver may trust an event only when its producer uses MikotoEventEmitter
+ * from the same exact mikoto-types commit. Raw emitters and different commits
+ * produce undefined behavior. package.json versions are not compatibility
+ * signals.
  */
 export type MikotoEventEmitter = {
 	emit<Name extends MikotoEventName>(

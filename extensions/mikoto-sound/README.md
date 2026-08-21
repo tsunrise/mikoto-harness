@@ -17,7 +17,7 @@ events.emit("mikoto-sound:sound", {
 
 An empty payload object selects `require-attention`. There is deliberately no
 callback or acknowledgement: emitting remains safe when Mikoto Sound is not
-loaded. Unknown or malformed effects are ignored with a warning.
+loaded. Unknown effect names are ignored with a warning.
 
 On operating systems other than macOS, the extension registers nothing and is
 a silent no-op.
@@ -58,9 +58,10 @@ allowed. Configuration is strict and atomic: an unknown field, invalid mapping,
 or unusable file rejects all overrides and keeps the complete bundled map.
 Config edits take effect after `/reload` or a new session.
 
-Mikoto Sound uses Zod 4 for runtime validation of config and event payloads.
-The shared `mikoto-types` package remains declaration-only and has no Zod
-dependency.
+Mikoto Sound uses Zod 4 for runtime validation of config. Event payloads are
+trusted when producers use `mikoto-types` from the same exact commit, so they
+are not validated again at runtime. The shared package remains
+declaration-only and has no Zod dependency.
 
 Configuration and playback problems are written to stderr and recorded as
 UI-only branch warnings. They are never added to model context.

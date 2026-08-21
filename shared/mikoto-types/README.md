@@ -15,8 +15,11 @@ events.emit("mikoto-sound:sound", {
 });
 ```
 
-Pi's runtime event bus accepts `unknown`. Consumers must still validate event
-payloads at runtime instead of trusting these declarations.
+Any event emitted to a `mikoto-*` channel **must** be type-checked through
+`MikotoEventEmitter`, and all participating extensions must use
+`mikoto-types` from the same exact commit. `mikoto-types` does **not** use
+SemVer: the `version` field in `package.json` is not a compatibility signal,
+and every commit is a different version. Otherwise, behavior is undefined.
 
 ## Development
 

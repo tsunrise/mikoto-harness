@@ -1,13 +1,9 @@
 import type { Stats } from "node:fs";
 import type { SpawnOptions } from "node:child_process";
 import type { z } from "zod";
-import type {
-	soundConfigSchema,
-	soundEventSchema,
-} from "./schema.ts";
+import type { soundConfigSchema } from "./schema.ts";
 
 export type ParsedSoundConfig = z.infer<typeof soundConfigSchema>;
-export type ParsedSoundEventPayload = z.infer<typeof soundEventSchema>;
 
 export type AudioInspection =
 	| { readonly supported: true }

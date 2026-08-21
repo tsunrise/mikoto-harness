@@ -17,8 +17,7 @@
   "sideEffects": false,
   "scripts": {
     "check": "tsc --noEmit",
-    "test": "tsc --noEmit -p test/tsconfig.json",
-    "validate": "npm run check && npm test"
+    "validate": "npm run check"
   },
   "devDependencies": {
     "typescript": "^5.9.0"

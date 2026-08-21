@@ -7,9 +7,19 @@ pi.events.on(channel, receiver);
 pi.events.emit(channel, data);
 ```
 
-The bus is intentionally loose at runtime: channels are strings and payloads
-are `unknown`. `shared/mikoto-types` provides the compile-time contract used by
-Mikoto producers, while each receiving extension owns runtime validation.
+Pi types channels as strings and payloads as `unknown`.
+`shared/mikoto-types` supplies the channel/payload contract used by Mikoto
+producers and receivers.
+
+Mikoto event payloads are a deliberately trusted boundary. A supported
+producer uses `MikotoEventEmitter` from the same exact `mikoto-types` commit as
+the receiver. The receiver asserts the corresponding `MikotoEventPayload` and
+does not repeat the contract as a Zod schema or handwritten runtime validator.
+Third-party extensions may opt into the same convention.
+
+This trust is intentionally unchecked. Raw `pi.events.emit()` calls, `any`,
+different or stale `mikoto-types` commits, and channel collisions can all
+bypass the contract. In those cases, behavior is undefined.
 
 ## Delivery model
 
@@ -19,7 +29,7 @@ Treat the event bus as best-effort, in-memory notification:
 - Messages are not queued, replayed, persisted, or sent to another process.
 - A message is lost when no receiver is registered at the time it is emitted.
 - The sender cannot assume that the receiving extension is installed, enabled,
-  compatible, or still active.
+  or still active.
 - More than one listener can subscribe to the same channel.
 - Receiver failures do not provide a result to the sender.
 
@@ -29,8 +39,8 @@ extension factories have had an opportunity to register their listeners.
 
 ## Defining a new receiver
 
-The receiving extension owns the channel name, payload contract, runtime
-schema, and invalid-input behavior.
+The receiving extension owns the channel name, payload contract, defaults, and
+business behavior.
 
 ### 1. Register the contract in `mikoto-types`
 
@@ -51,91 +61,48 @@ export type MikotoEventMap = {
 ```
 
 Use a channel owned by the receiver, normally
-`mikoto-<extension>:<operation>`. One channel must have one canonical payload
-type. `MikotoEventName`, `MikotoEventPayload`, and `MikotoEventEmitter`
-automatically derive the new contract from `MikotoEventMap`.
+`mikoto-<extension>:<operation>`. One channel has one canonical payload type.
+`MikotoEventName`, `MikotoEventPayload`, and `MikotoEventEmitter`
+automatically derive the contract from `MikotoEventMap`.
 
-Add compile-time tests under `shared/mikoto-types/test/` covering accepted and
-rejected payloads. `mikoto-types` must remain declaration-only: do not add Zod,
-runtime schemas, constants, JavaScript entry points, or Pi resources to it.
+The TypeScript shape is the complete accepted payload contract. For example,
+`widgetId: string` permits every string, including an empty string. If the
+receiver needs to handle a value specially, represent that in the type when
+possible or treat it as ordinary business behavior rather than assuming an
+unwritten validation rule.
 
-Extensions that import these declarations should list `mikoto-types` as a
-development dependency and use `import type`.
+`mikoto-types` remains declaration-only: do not add Zod, runtime schemas,
+constants, JavaScript entry points, or Pi resources to it. Extensions that
+import these declarations should list `mikoto-types` as a development
+dependency and use `import type`.
 
-### 2. Define a runtime schema in the receiver
+### 2. Assert the payload at the listener
 
-Every receiver **must treat event data as untrusted**, even when all current
-producers are in this repository. Pi's public bus accepts arbitrary channel
-strings and `unknown` payloads, and another extension or version can bypass
-`mikoto-types`.
-
-Prefer a receiver-local Zod schema:
+Keep the unchecked assertion local and visible where Pi's `unknown` payload
+enters the receiver:
 
 ```ts
-import { z } from "zod";
 import type { MikotoEventPayload } from "mikoto-types";
 
-const widgetRefreshSchema = z.strictObject({
-  widgetId: z.string().min(1),
-  force: z.boolean().optional(),
-});
+const WIDGET_REFRESH_EVENT = "mikoto-widget:refresh";
 
-type ParsedWidgetRefresh = z.infer<typeof widgetRefreshSchema>;
+pi.events.on(WIDGET_REFRESH_EVENT, (data) => {
+  const event =
+    data as MikotoEventPayload<typeof WIDGET_REFRESH_EVENT>;
 
-type Assert<Condition extends true> = Condition;
-type SchemaOutputMatchesContract = Assert<
-  z.output<typeof widgetRefreshSchema> extends
-    MikotoEventPayload<"mikoto-widget:refresh">
-    ? true
-    : false
->;
-type ContractMatchesSchemaInput = Assert<
-  MikotoEventPayload<"mikoto-widget:refresh"> extends
-    z.input<typeof widgetRefreshSchema>
-    ? true
-    : false
->;
-```
-
-The shared type and runtime schema are intentionally duplicated because they
-serve different consumers. Add compile-time compatibility assertions so they
-cannot silently drift. Use `z.infer` for extension-internal parsed types rather
-than writing another TypeScript shape.
-
-Zod is a runtime dependency of the receiving extension, not of
-`mikoto-types`. Put it in that extension's `dependencies`.
-
-If Zod cannot represent or validate the boundary, use another runtime
-validator or a carefully tested handwritten validator. At minimum, validate:
-
-- that the root value has the expected kind;
-- required and optional fields;
-- field value types and semantic constraints;
-- the channel's explicit unknown-field policy; and
-- callable fields before invoking them.
-
-Never replace runtime validation with a type assertion such as
-`data as MikotoEventPayload<...>`.
-
-### 3. Validate before any use
-
-Treat the listener's native `unknown` input as opaque. Pass it directly to the
-runtime validator and fail closed:
-
-```ts
-pi.events.on("mikoto-widget:refresh", (data) => {
-  const parsed = widgetRefreshSchema.safeParse(data);
-  if (!parsed.success) {
-    reportInvalidEvent(z.prettifyError(parsed.error));
-    return;
-  }
-
-  refreshWidget(parsed.data);
+  refreshWidget(event);
 });
 ```
 
-Decide and test whether unknown fields are rejected, stripped, or preserved; do
-not leave this to accident.
+Do not add a Zod schema, a handwritten shape guard, or malformed-event
+diagnostics for a Mikoto event payload. A type assertion performs no runtime
+check; it is conditionally safe because supported producers use the matching
+typed emitter contract.
+
+This exception applies only to Mikoto event payloads. Continue parsing and
+validating genuinely untrusted values such as config files, JSON, network
+responses, persisted data, and other public inputs. Those boundaries may use
+Zod or another appropriate validator.
 
 ## Sending a message
 
@@ -155,7 +122,8 @@ export default function mikotoProducer(pi: ExtensionAPI): void {
 ```
 
 Do not call `pi.events.emit()` directly for a Mikoto channel. The narrowed
-emitter checks the channel/payload pair and prevents producer-side drift.
+emitter checks the channel/payload pair and prevents producer-side drift during
+normal TypeScript compilation.
 
 Emission remains fire-and-forget. Do not require the receiver to be loaded and
 do not add a runtime dependency on the receiving extension merely to send an
@@ -163,10 +131,8 @@ event.
 
 ## Callback functions
 
-An event may include a callback only when both the `mikoto-types` payload and
-the receiver's runtime schema explicitly allow it.
-
-Shared declaration:
+An event may include a callback when the `mikoto-types` payload explicitly
+declares it:
 
 ```ts
 export type MikotoWidgetRefreshResult = {
@@ -179,42 +145,17 @@ export type MikotoWidgetRefreshEvent = {
 };
 ```
 
-Receiver-local Zod schema:
+The receiver trusts and invokes the asserted callback directly:
 
 ```ts
-const widgetRefreshResultSchema = z.strictObject({
-  refreshed: z.boolean(),
-});
+pi.events.on(WIDGET_REFRESH_EVENT, (data) => {
+  const event =
+    data as MikotoEventPayload<typeof WIDGET_REFRESH_EVENT>;
 
-const widgetRefreshCallbackSchema = z.function({
-  input: [widgetRefreshResultSchema],
-  output: z.void(),
-});
-
-const widgetRefreshSchema = z.strictObject({
-  widgetId: z.string().min(1),
-  callback: widgetRefreshCallbackSchema.optional(),
+  const refreshed = refreshWidget(event);
+  event.callback?.({ refreshed });
 });
 ```
-
-`z.function()` verifies that the value is callable. Parsing returns a wrapper
-that validates arguments and the return value whenever the receiver invokes
-the parsed callback. Invoke `parsed.data.callback`, not the original unparsed
-function. For an asynchronous callback, declare a promise output in both the
-shared type and Zod schema.
-
-If only callability needs checking and preserving the original function
-identity matters, a receiver can use:
-
-```ts
-type Callback = (result: MikotoWidgetRefreshResult) => void;
-
-const callbackSchema = z.custom<Callback>(
-  (value) => typeof value === "function",
-);
-```
-
-This weaker form does not validate callback arguments or return values.
 
 Callbacks have important limitations:
 
@@ -223,25 +164,27 @@ Callbacks have important limitations:
   RPC, or transferred to another process.
 - The callback may be called zero times when no receiver is loaded.
 - It may be called more than once when multiple listeners handle the channel.
-- Callback implementations and Zod wrappers can throw or reject; define who
-  catches and reports those failures.
-- Zod validates a function contract but does not sandbox executable code.
+- Callback implementations can throw or reject; define who catches and reports
+  those failures.
 
 Document callback cardinality and failure behavior in the channel contract.
 Callbacks should normally be optional and senders must have a fallback. When a
 request/response must be serializable or decoupled, prefer a response event
 with a correlation ID instead of a function callback.
 
-## Compatibility and testing
+## Revision policy and testing
 
-Treat the receiver's runtime schema as the authority at execution time and
-`mikoto-types` as the authority at compile time.
+`mikoto-types` does **not** use SemVer. The `version` field in `package.json`
+is not used as a compatibility signal: every commit is a different version.
+All participating extensions must use the same exact `mikoto-types` commit;
+otherwise, behavior is undefined. Update all in-repository extensions together
+when the contract changes. Third-party extensions must use that same commit.
 
-- Adding an optional field is normally backward-compatible.
-- Adding a required field, renaming a channel/field, or changing a field type
-  is breaking and must follow `mikoto-types` SemVer.
-- Test valid, malformed, and semantically invalid payloads.
-- Verify invalid payloads cause no side effects.
-- Verify producers compile only with recognized channel/payload pairs.
-- If callbacks are supported, test argument/output validation, absent
-  receivers, repeated listeners, thrown errors, and async behavior.
+- Run normal TypeScript checks for every affected producer and receiver.
+- Test valid event payloads and the receiver's business behavior.
+- Do not test malformed Mikoto payload handling: it is outside the supported
+  contract.
+- Continue testing malformed and semantically invalid data at untrusted
+  boundaries such as config parsing.
+- If callbacks are supported, test absent receivers, repeated listeners,
+  callback failures, and async behavior where applicable.

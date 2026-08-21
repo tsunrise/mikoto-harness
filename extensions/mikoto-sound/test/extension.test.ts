@@ -11,7 +11,6 @@ import mikotoSound, {
 	SOUND_EVENT_NAME,
 	SOUND_WARNING_ENTRY_TYPE,
 	createBundledEffects,
-	parseSoundEvent,
 } from "../src/index.ts";
 import type {
 	PlayerProcess,
@@ -103,14 +102,12 @@ describe("Mikoto Sound extension", () => {
 
 			const listener = setup.eventListeners.get(SOUND_EVENT_NAME);
 			assert.ok(listener);
-			listener(undefined);
 			listener({});
 			listener({ effect: COMPLETED_SOUND_EFFECT });
 			setup.handlers.get("agent_settled")?.({}, { mode: "json" });
 
 			const bundled = createBundledEffects();
 			assert.deepEqual(spawned, [
-				bundled.get(DEFAULT_SOUND_EFFECT),
 				bundled.get(DEFAULT_SOUND_EFFECT),
 				bundled.get(COMPLETED_SOUND_EFFECT),
 				bundled.get(COMPLETED_SOUND_EFFECT),
@@ -204,7 +201,7 @@ describe("Mikoto Sound extension", () => {
 		}
 	});
 
-	it("warns once per malformed or unknown runtime issue", () => {
+	it("treats blank names as unknown effects and warns once", () => {
 		const setup = setupApi();
 		const logs: string[] = [];
 		mikotoSound(setup.api, {
@@ -216,35 +213,11 @@ describe("Mikoto Sound extension", () => {
 		const listener = setup.eventListeners.get(SOUND_EVENT_NAME);
 		assert.ok(listener);
 
-		listener(null);
-		listener([]);
-		listener({ effect: "missing" });
-		listener({ effect: "missing" });
+		listener({ effect: " " });
+		listener({ effect: " " });
 
-		assert.equal(logs.length, 2);
-		assert.equal(setup.entries.length, 2);
-		assert.match(logs[0] ?? "", /malformed/);
-		assert.match(logs[1] ?? "", /Unknown sound effect/);
-	});
-});
-
-describe("sound event parsing", () => {
-	it("defaults omitted payloads and rejects malformed values", () => {
-		assert.deepEqual(parseSoundEvent(undefined), {
-			valid: true,
-			effect: DEFAULT_SOUND_EFFECT,
-		});
-		assert.deepEqual(parseSoundEvent({}), {
-			valid: true,
-			effect: DEFAULT_SOUND_EFFECT,
-		});
-		assert.equal(parseSoundEvent(null).valid, false);
-		assert.equal(parseSoundEvent("completed").valid, false);
-		assert.equal(parseSoundEvent({ effect: 1 }).valid, false);
-		assert.equal(parseSoundEvent({ effect: " " }).valid, false);
-		assert.deepEqual(parseSoundEvent({ effect: "custom", extra: true }), {
-			valid: true,
-			effect: "custom",
-		});
+		assert.equal(logs.length, 1);
+		assert.equal(setup.entries.length, 1);
+		assert.match(logs[0] ?? "", /Unknown sound effect/);
 	});
 });

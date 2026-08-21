@@ -6,6 +6,7 @@ import {
 	type ExtensionAPI,
 } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
+import type { MikotoEventPayload } from "mikoto-types";
 import {
 	inspectAudioWithAfinfo,
 	loadSoundConfig,
@@ -16,14 +17,9 @@ import {
 	SOUND_WARNING_ENTRY_TYPE,
 } from "./diagnostics.ts";
 import { playAudio } from "./player.ts";
-import {
-	formatZodError,
-	soundEventSchema,
-} from "./schema.ts";
 import type {
 	AudioInspector,
 	ConfigFileSystem,
-	ParsedSoundEventPayload,
 	PlayerSpawner,
 	SoundWarningEntry,
 } from "./types.ts";
@@ -106,15 +102,8 @@ export default function mikotoSound(
 
 	// Handle event from other extensions
 	pi.events.on(SOUND_EVENT_NAME, (data) => {
-		const parsed = parseSoundEvent(data);
-		if (!parsed.valid) {
-			diagnostics.reportRuntime({
-				key: parsed.key,
-				message: parsed.message,
-			});
-			return;
-		}
-		playEffect(parsed.effect);
+		const event = data as MikotoEventPayload<typeof SOUND_EVENT_NAME>;
+		playEffect(event.effect ?? DEFAULT_SOUND_EFFECT);
 	});
 
 	// Handle built-in turn-finish event
@@ -134,31 +123,6 @@ export function createBundledEffects(): Map<string, string> {
 			fileURLToPath(new URL("../resources/bip-bop-01.mp3", import.meta.url)),
 		],
 	]);
-}
-
-export type ParsedSoundEvent =
-	| { readonly valid: true; readonly effect: string }
-	| {
-			readonly valid: false;
-			readonly key: string;
-			readonly message: string;
-	  };
-
-export function parseSoundEvent(data: unknown): ParsedSoundEvent {
-	const parsed = soundEventSchema.safeParse(data);
-	if (!parsed.success) {
-		return {
-			valid: false,
-			key: "malformed-event",
-			message:
-				`Ignored malformed mikoto-sound:sound event:\n${formatZodError(parsed.error)}`,
-		};
-	}
-	const event: ParsedSoundEventPayload = parsed.data;
-	return {
-		valid: true,
-		effect: event?.effect ?? DEFAULT_SOUND_EFFECT,
-	};
 }
 
 export {
