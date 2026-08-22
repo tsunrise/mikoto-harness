@@ -28,7 +28,7 @@ npm run validate
 As an engineer, I care about code quality, but I don't have sufficient time / attention to
 make every code on par to my standard. Therefore, I'm putting different effort to different components. 
 I respect your time, so I honestly disclose my human effort spent on 
-each code component, in corresponding `README.md`s. My "effort level" are classified into 
+each code component, in corresponding `README.md`s. My "effort level"s are classified into 
 following categories:
 
 - 📝 I own the code: 
