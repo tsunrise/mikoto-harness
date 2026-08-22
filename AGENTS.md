@@ -63,3 +63,21 @@ for more details.
 ## Indentation
 
 Use 2 spaces as one level of code indentation.
+
+## LLM usage disclosure
+
+When writing README.md for an extension, you MUST include a subsection showing
+human effort involved immediately before the first other subsection. Keep the
+extension summary directly below the main title. Refer to "LLM usage disclosure"
+in @README.md.
+
+Section example:
+```
+Extension summary.
+
+## LLM Usage Disclosure
+
+My effort on this extension: 💡 I only own the idea
+
+Refer to repo [README.md](../../README.md#LLM_usage_disclosure) for more details.
+```

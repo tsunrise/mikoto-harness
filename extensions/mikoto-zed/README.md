@@ -8,6 +8,12 @@ Adapted from the upstream
 project (MIT). The database logic was independently compared with the OpenCode
 Zed implementation and with a current Zed SQLite schema.
 
+## LLM Usage Disclosure
+
+My effort on this extension: 💡 I only own the idea
+
+Refer to repo [README.md](../../README.md#LLM_usage_disclosure) for more details.
+
 ## What it does
 
 On every submitted prompt, the extension reads Zed's local state database,
