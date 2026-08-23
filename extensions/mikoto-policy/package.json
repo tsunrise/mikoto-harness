@@ -1,0 +1,42 @@
+{
+  "name": "mikoto-policy",
+  "version": "0.1.0",
+  "description": "Mikoto Policy: define and evaluate filesystem policy for Pi extensions.",
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "policy",
+    "filesystem"
+  ],
+  "license": "MIT",
+  "type": "module",
+  "files": [
+    "index.ts",
+    "src",
+    "mikoto-policy.default.json",
+    "mikoto-policy.schema.json"
+  ],
+  "scripts": {
+    "generate:schema": "node scripts/generate-schema.ts",
+    "check:schema": "node scripts/generate-schema.ts --check",
+    "check": "tsc --noEmit",
+    "validate": "npm run check:schema && npm run check"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "dependencies": {
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "^0.84.2",
+    "@types/node": "^24.0.0",
+    "mikoto-types": "^0.1.0",
+    "typescript": "^5.9.0"
+  },
+  "pi": {
+    "extensions": [
+      "./index.ts"
+    ]
+  }
+}

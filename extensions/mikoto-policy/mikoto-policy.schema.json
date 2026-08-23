@@ -1,0 +1,352 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "description": "Optional JSON Schema URI.",
+      "type": "string"
+    },
+    "filesystem": {
+      "type": "object",
+      "properties": {
+        "denyRead": {
+          "description": "Paths denied for reading.",
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[^\\u0000*?\\[\\]]+$",
+                "description": "Literal absolute, cwd-relative, or home-relative filesystem path."
+              }
+            },
+            {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "+": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "^[^\\u0000*?\\[\\]]+$",
+                        "description": "Literal absolute, cwd-relative, or home-relative filesystem path."
+                      }
+                    },
+                    "-": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "^[^\\u0000*?\\[\\]]+$",
+                        "description": "Literal absolute, cwd-relative, or home-relative filesystem path."
+                      }
+                    }
+                  },
+                  "required": [
+                    "+",
+                    "-"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "+": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "^[^\\u0000*?\\[\\]]+$",
+                        "description": "Literal absolute, cwd-relative, or home-relative filesystem path."
+                      }
+                    }
+                  },
+                  "required": [
+                    "+"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "-": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "^[^\\u0000*?\\[\\]]+$",
+                        "description": "Literal absolute, cwd-relative, or home-relative filesystem path."
+                      }
+                    }
+                  },
+                  "required": [
+                    "-"
+                  ],
+                  "additionalProperties": false
+                }
+              ],
+              "description": "Add and/or remove exact path strings from the previous layer."
+            }
+          ]
+        },
+        "allowRead": {
+          "description": "Paths re-allowed within denied read regions.",
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[^\\u0000*?\\[\\]]+$",
+                "description": "Literal absolute, cwd-relative, or home-relative filesystem path."
+              }
+            },
+            {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "+": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "^[^\\u0000*?\\[\\]]+$",
+                        "description": "Literal absolute, cwd-relative, or home-relative filesystem path."
+                      }
+                    },
+                    "-": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "^[^\\u0000*?\\[\\]]+$",
+                        "description": "Literal absolute, cwd-relative, or home-relative filesystem path."
+                      }
+                    }
+                  },
+                  "required": [
+                    "+",
+                    "-"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "+": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "^[^\\u0000*?\\[\\]]+$",
+                        "description": "Literal absolute, cwd-relative, or home-relative filesystem path."
+                      }
+                    }
+                  },
+                  "required": [
+                    "+"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "-": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "^[^\\u0000*?\\[\\]]+$",
+                        "description": "Literal absolute, cwd-relative, or home-relative filesystem path."
+                      }
+                    }
+                  },
+                  "required": [
+                    "-"
+                  ],
+                  "additionalProperties": false
+                }
+              ],
+              "description": "Add and/or remove exact path strings from the previous layer."
+            }
+          ]
+        },
+        "allowWrite": {
+          "description": "Paths allowed for writing.",
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[^\\u0000*?\\[\\]]+$",
+                "description": "Literal absolute, cwd-relative, or home-relative filesystem path."
+              }
+            },
+            {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "+": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "^[^\\u0000*?\\[\\]]+$",
+                        "description": "Literal absolute, cwd-relative, or home-relative filesystem path."
+                      }
+                    },
+                    "-": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "^[^\\u0000*?\\[\\]]+$",
+                        "description": "Literal absolute, cwd-relative, or home-relative filesystem path."
+                      }
+                    }
+                  },
+                  "required": [
+                    "+",
+                    "-"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "+": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "^[^\\u0000*?\\[\\]]+$",
+                        "description": "Literal absolute, cwd-relative, or home-relative filesystem path."
+                      }
+                    }
+                  },
+                  "required": [
+                    "+"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "-": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "^[^\\u0000*?\\[\\]]+$",
+                        "description": "Literal absolute, cwd-relative, or home-relative filesystem path."
+                      }
+                    }
+                  },
+                  "required": [
+                    "-"
+                  ],
+                  "additionalProperties": false
+                }
+              ],
+              "description": "Add and/or remove exact path strings from the previous layer."
+            }
+          ]
+        },
+        "denyWrite": {
+          "description": "Paths denied for writing within allowed write regions.",
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[^\\u0000*?\\[\\]]+$",
+                "description": "Literal absolute, cwd-relative, or home-relative filesystem path."
+              }
+            },
+            {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "+": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "^[^\\u0000*?\\[\\]]+$",
+                        "description": "Literal absolute, cwd-relative, or home-relative filesystem path."
+                      }
+                    },
+                    "-": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "^[^\\u0000*?\\[\\]]+$",
+                        "description": "Literal absolute, cwd-relative, or home-relative filesystem path."
+                      }
+                    }
+                  },
+                  "required": [
+                    "+",
+                    "-"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "+": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "^[^\\u0000*?\\[\\]]+$",
+                        "description": "Literal absolute, cwd-relative, or home-relative filesystem path."
+                      }
+                    }
+                  },
+                  "required": [
+                    "+"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "-": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "^[^\\u0000*?\\[\\]]+$",
+                        "description": "Literal absolute, cwd-relative, or home-relative filesystem path."
+                      }
+                    }
+                  },
+                  "required": [
+                    "-"
+                  ],
+                  "additionalProperties": false
+                }
+              ],
+              "description": "Add and/or remove exact path strings from the previous layer."
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "description": "Filesystem policy. Read is allowed in default, and follow deny-and-allow pattern. Write is denied by default, and follow allow-and-deny pattern."
+    }
+  },
+  "additionalProperties": false,
+  "title": "Mikoto Policy",
+  "description": "Policy enforced in Mikoto Harness."
+}

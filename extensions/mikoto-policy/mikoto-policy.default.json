@@ -1,0 +1,11 @@
+{
+  "$schema": "./mikoto-policy.schema.json",
+  "filesystem": {
+    "denyRead": [],
+    "allowRead": [],
+    "allowWrite": [
+      "."
+    ],
+    "denyWrite": []
+  }
+}

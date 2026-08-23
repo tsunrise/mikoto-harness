@@ -7,6 +7,21 @@ export type MikotoSoundEvent = {
 	readonly effect?: string;
 };
 
+/**
+ * Structured-cloneable effective Mikoto filesystem policy.
+ *
+ * Paths are normalized absolute paths. This document contains data only;
+ * evaluation methods are exposed by the policy service that owns it.
+ */
+export type MikotoPolicyDocument = {
+  readonly filesystem: {
+    readonly denyRead: readonly string[];
+    readonly allowRead: readonly string[];
+    readonly allowWrite: readonly string[];
+    readonly denyWrite: readonly string[];
+  };
+};
+
 /** Compile-time source of truth for Mikoto inter-extension event channels. */
 export type MikotoEventMap = {
 	readonly "mikoto-sound:sound": MikotoSoundEvent;
