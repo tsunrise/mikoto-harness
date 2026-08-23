@@ -24,37 +24,52 @@ export function evaluateRead(
       "read",
     );
     const requestCanonicalPath = canonicalized.requestPath;
-    let denyRuleIndex: number | undefined;
-
-    for (
-      let index = 0;
-      index < canonicalized.policy.filesystem.denyRead.length;
-      index++
-    ) {
-      if (
-        matchesPolicyPath(
-          canonicalized.policy.filesystem.denyRead[index],
+    const denyPaths = canonicalized.policy.filesystem.denyRead;
+    // A directory read also effectively requests every denied subtree it
+    // could traverse.
+    const effectiveRequestPaths = entity === "file"
+      ? [requestCanonicalPath]
+      : [
           requestCanonicalPath,
-          entity,
-        )
-      ) {
-        denyRuleIndex = index;
-        break;
+          ...denyPaths.filter((denyPath) =>
+            isSameOrDescendant(requestCanonicalPath, denyPath)
+          ),
+        ];
+
+    for (const effectiveRequestPath of new Set(effectiveRequestPaths)) {
+      let denyRuleIndex: number | undefined;
+
+      for (let index = 0; index < denyPaths.length; index++) {
+        if (!isSameOrDescendant(denyPaths[index], effectiveRequestPath)) {
+          continue;
+        }
+        if (
+          denyRuleIndex === undefined ||
+          isSameOrDescendant(denyPaths[denyRuleIndex], denyPaths[index])
+        ) {
+          denyRuleIndex = index;
+        }
+      }
+
+      if (denyRuleIndex === undefined) continue;
+
+      const denyPath = denyPaths[denyRuleIndex];
+      const isAllowed = canonicalized.policy.filesystem.allowRead.some(
+        (allowPath) =>
+          // Request /project with deny /project/secrets and allow
+          // /project/secrets/public must keep the rest of secrets denied.
+          isSameOrDescendant(allowPath, effectiveRequestPath) &&
+          isSameOrDescendant(denyPath, allowPath),
+      );
+      if (!isAllowed) {
+        return {
+          allowed: false,
+          deniedPath: policy.filesystem.denyRead[denyRuleIndex],
+        };
       }
     }
 
-    if (denyRuleIndex === undefined) return { allowed: true };
-
-    for (const allowPath of canonicalized.policy.filesystem.allowRead) {
-      if (matchesPolicyPath(allowPath, requestCanonicalPath, entity)) {
-        return { allowed: true };
-      }
-    }
-
-    return {
-      allowed: false,
-      deniedPath: policy.filesystem.denyRead[denyRuleIndex],
-    };
+    return { allowed: true };
   } catch {
     return { allowed: false, deniedPath: path };
   }
@@ -78,10 +93,9 @@ export function evaluateWrite(
       index++
     ) {
       if (
-        matchesPolicyPath(
+        isSameOrDescendant(
           canonicalized.policy.filesystem.denyWrite[index],
           requestCanonicalPath,
-          "file",
         )
       ) {
         return {
@@ -97,10 +111,9 @@ export function evaluateWrite(
       index++
     ) {
       if (
-        matchesPolicyPath(
+        isSameOrDescendant(
           canonicalized.policy.filesystem.allowWrite[index],
           requestCanonicalPath,
-          "file",
         )
       ) {
         return { allowed: true };
@@ -256,18 +269,6 @@ function isValidAllowRulePath(
   }
 
   return false;
-}
-
-function matchesPolicyPath(
-  ruleCanonicalPath: string,
-  requestCanonicalPath: string,
-  requestEntity: "file" | "directory",
-): boolean {
-  if (isSameOrDescendant(ruleCanonicalPath, requestCanonicalPath)) return true;
-  return (
-    requestEntity === "directory" &&
-    isSameOrDescendant(requestCanonicalPath, ruleCanonicalPath)
-  );
 }
 
 function isSameOrDescendant(

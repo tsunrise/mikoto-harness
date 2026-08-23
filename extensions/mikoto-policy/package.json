@@ -20,7 +20,8 @@
     "generate:schema": "node scripts/generate-schema.ts",
     "check:schema": "node scripts/generate-schema.ts --check",
     "check": "tsc --noEmit",
-    "validate": "npm run check:schema && npm run check"
+    "test": "node --test test/*.spec.ts",
+    "validate": "npm run check:schema && npm run check && npm test"
   },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*"
