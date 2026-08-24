@@ -1,18 +1,16 @@
-import { fileURLToPath } from "node:url";
 import {
   isToolCallEventType,
   type ExtensionAPI,
 } from "@earendil-works/pi-coding-agent";
-import type { MikotoPolicyDocumentLoader } from "./config.ts";
+import {
+  PERMISSION_PATH,
+  type MikotoPolicyDocumentLoader,
+} from "./config.ts";
 import {
   evaluateRead,
   evaluateWrite,
 } from "./evaluate.ts";
 import { resolveToolPath } from "./utils.ts";
-
-const PERMISSION_PATH = fileURLToPath(
-  new URL("../PERMISSION.md", import.meta.url),
-);
 
 const ENFORCED_TOOL_NAMES = new Set([
   "read",

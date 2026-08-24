@@ -13,6 +13,10 @@ export const BUNDLED_POLICY_PATH = fileURLToPath(
   new URL("../mikoto-policy.default.json", import.meta.url),
 );
 
+export const PERMISSION_PATH = fileURLToPath(
+  new URL("../PERMISSION.md", import.meta.url),
+);
+
 const FsPath = z
   .string()
   .min(1, "Path cannot be empty.")

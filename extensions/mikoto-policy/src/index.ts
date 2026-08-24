@@ -24,6 +24,7 @@ export {
   mergePolicyConfigs,
   MikotoPolicyConfig,
   MikotoPolicyDocumentLoader,
+  PERMISSION_PATH,
 } from "./config.ts";
 export type { MikotoPolicyLoadResult } from "./config.ts";
 export { resolveToolPath } from "./utils.ts";

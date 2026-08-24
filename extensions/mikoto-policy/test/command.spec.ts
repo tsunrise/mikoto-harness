@@ -12,7 +12,10 @@ import type {
   ExtensionCommandContext,
 } from "@earendil-works/pi-coding-agent";
 import { registerViewConfigCommand } from "../src/command.ts";
-import { MikotoPolicyDocumentLoader } from "../src/config.ts";
+import {
+  MikotoPolicyDocumentLoader,
+  PERMISSION_PATH,
+} from "../src/config.ts";
 
 describe("registerViewConfigCommand", () => {
   it("registers a manual command that displays paths and merged policy", async () => {
@@ -92,6 +95,7 @@ describe("registerViewConfigCommand", () => {
       assert.equal(notificationLevel, "info");
       assert.ok(notificationText?.includes(globalConfigPath));
       assert.ok(notificationText?.includes(workspaceConfigPath));
+      assert.ok(notificationText?.includes(PERMISSION_PATH));
       assert.ok(
         notificationText?.includes(path.join(cwd, "global-secret")),
       );

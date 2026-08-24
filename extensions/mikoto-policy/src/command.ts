@@ -1,5 +1,8 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import type { MikotoPolicyDocumentLoader } from "./config.ts";
+import {
+  PERMISSION_PATH,
+  type MikotoPolicyDocumentLoader,
+} from "./config.ts";
 
 // register /mikoto-policy:view to display current policy to UI (not sent to LLM)
 export function registerViewConfigCommand(
@@ -16,6 +19,7 @@ export function registerViewConfigCommand(
       const output = [
         `Global config: ${loaded.globalConfigPath}`,
         `Workspace config: ${loaded.workspaceConfigPath}`,
+        `Policy documentation: ${PERMISSION_PATH}`,
         "",
         "Merged config:",
         JSON.stringify(loaded.document, null, 2),
