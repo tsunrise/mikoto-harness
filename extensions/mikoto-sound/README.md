@@ -22,12 +22,6 @@ loaded. Unknown effect names are ignored with a warning.
 On operating systems other than macOS, the extension registers nothing and is
 a silent no-op.
 
-## LLM Usage Disclosure
-
-My effort on this extension: 🏗️ I only own the architecture
-
-Refer to repo [README.md](../../README.md#LLM_usage_disclosure) for more details.
-
 ## Bundled effects
 
 | Effect | File |

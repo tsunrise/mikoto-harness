@@ -23,26 +23,6 @@ npm run validate -w mikoto-sound
 npm run validate
 ```
 
-## LLM usage disclosure
-
-As an engineer, I care about code quality, but I don't have sufficient time / attention to
-make every code on par to my standard. Therefore, I'm putting different effort to different components. 
-I respect your time, so I honestly disclose my human effort spent on 
-each code component, in corresponding `README.md`s. My "effort level" are classified into 
-following categories:
-
-- 📝 I own the code: 
-  - I spent a lot of human effort on code level. 
-  - The code is still heavily LLM assisted but  
-  - I own all the low-level code design. This reflects my code quality at work.
-- 🏗️ I only own the architecture: 
-  - I defined the architecuture and LLM wrote most code one-shot from scratch. 
-  - I reviewed those code similar to how I review other's PR/MR, but I don't really own the code. 
-- 💡 I only own the idea: 
-  - I have the idea but I didn't really review the architecture AND code. 
-  - Given that I did not spend much time on this component, shouldn't you. Just get the idea, and don't waste your time reading the code.
-
-
 ## Extension Interoperability
 
 - Some extensions in the repo require one or more extensions in the repo to be

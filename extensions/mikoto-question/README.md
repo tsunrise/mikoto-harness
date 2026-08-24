@@ -4,12 +4,6 @@ Mikoto Question is a Pi extension that adds OpenAI Codex's
 `request_user_input` tool contract and an interactive terminal questionnaire.
 It also provides a turn-scoped Do not disturb mode.
 
-## LLM Usage Disclosure
-
-My effort on this extension: 🏗️ I only own the architecture
-
-Refer to repo [README.md](../../README.md#LLM_usage_disclosure) for more details.
-
 ## Install
 
 Install directly from a local checkout:
