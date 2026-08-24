@@ -2,12 +2,9 @@
 
 A Mikoto policy describes permitted and denied operations.
 
-The optional `$schema` field identifies the JSON Schema used to validate and
-edit the policy document. It does not grant or deny permissions.
+## Policy Locations
 
-## Policy layers
-
-Policy is loaded from these layers, from lowest to highest precedence:
+Policy is loaded from these locations, from lowest to highest precedence:
 
 1. The bundled `mikoto-policy.default.json`.
 2. `mikoto-policy.json` in the Pi agent directory.
@@ -62,3 +59,13 @@ Writes are denied by default.
 
 A write requires a matching allow rule. Any matching deny rule takes
 precedence over all allow rules, regardless of specificity.
+
+## Update Policy
+
+To update the policy:
+- Request user's permission
+- Update workspace policy config (or global if explicitly requested by user)
+- Ask user to call `/reload` to let new policy take into effect.
+
+Policy schema is located at `mikoto-policy.schema.json` in the same directory as this markdown file. Only
+read it if you attempt to update policy.
