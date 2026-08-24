@@ -13,6 +13,7 @@
   "files": [
     "index.ts",
     "src",
+    "PERMISSION.md",
     "mikoto-policy.default.json",
     "mikoto-policy.schema.json"
   ],

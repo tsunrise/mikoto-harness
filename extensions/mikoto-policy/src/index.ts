@@ -4,7 +4,7 @@ import {
   BUNDLED_POLICY_PATH,
   MikotoPolicyConfig,
 } from "./config.ts";
-import { enforcePiNativeTools } from "./native.ts";
+import { enforcePiNativeTools } from "./built-in-tools.ts";
 
 
 export default async function mikotoPolicy(pi: ExtensionAPI): Promise<void> {
@@ -17,5 +17,6 @@ export {
   mergePolicyConfigs,
   MikotoPolicyConfig,
 } from "./config.ts";
+export { resolveToolPath } from "./utils.ts";
 
 export type { MikotoPolicyDocument } from "mikoto-types";

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
 import type {
   ExtensionAPI,
@@ -7,7 +8,7 @@ import type {
   ToolCallEventResult,
 } from "@earendil-works/pi-coding-agent";
 import type { MikotoPolicyConfig } from "../src/config.ts";
-import { enforcePiNativeTools } from "../src/native.ts";
+import { enforcePiNativeTools } from "../src/built-in-tools.ts";
 
 type ToolCallHandler = (
   event: ToolCallEvent,
@@ -51,9 +52,13 @@ describe("enforcePiNativeTools", () => {
       } as ToolCallEvent,
       ctx,
     );
+    const permissionPath = fileURLToPath(
+      new URL("../PERMISSION.md", import.meta.url),
+    );
     const blocked = {
       block: true,
-      reason: "Mikoto Policy denied this tool call.",
+      reason:
+        `Mikoto Policy denied this tool call. See ${permissionPath}.`,
     };
 
     assert.deepEqual(

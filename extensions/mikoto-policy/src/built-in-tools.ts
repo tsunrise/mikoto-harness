@@ -1,5 +1,4 @@
-import { homedir } from "node:os";
-import nodePath from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   isToolCallEventType,
   type ExtensionAPI,
@@ -12,6 +11,11 @@ import {
   evaluateRead,
   evaluateWrite,
 } from "./evaluate.ts";
+import { resolveToolPath } from "./utils.ts";
+
+const PERMISSION_PATH = fileURLToPath(
+  new URL("../PERMISSION.md", import.meta.url),
+);
 
 export function enforcePiNativeTools(policy: MikotoPolicyConfig, pi: ExtensionAPI) {
   pi.on("tool_call", (event, ctx) => {
@@ -62,22 +66,9 @@ export function enforcePiNativeTools(policy: MikotoPolicyConfig, pi: ExtensionAP
     if (decision && !decision.allowed) {
       return {
         block: true,
-        reason: "Mikoto Policy denied this tool call.",
+        reason:
+          `Mikoto Policy denied this tool call. See ${PERMISSION_PATH}.`,
       };
     }
   });
-}
-
-function resolveToolPath(toolPath: string, cwd: string): string {
-  let resolvedPath = toolPath.replace(
-    /[\u00A0\u2000-\u200A\u202F\u205F\u3000]/g,
-    " ",
-  );
-  if (resolvedPath.startsWith("@")) resolvedPath = resolvedPath.slice(1);
-  if (resolvedPath === "~") {
-    resolvedPath = homedir();
-  } else if (resolvedPath.startsWith("~/")) {
-    resolvedPath = nodePath.join(homedir(), resolvedPath.slice(2));
-  }
-  return nodePath.resolve(cwd, resolvedPath);
 }

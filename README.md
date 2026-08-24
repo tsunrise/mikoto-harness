@@ -34,5 +34,5 @@ npm run validate
 
 ## Disclosure on LLM use
 
-Code is heavily assisted with LLM but I do spent human time here. Check git history
-for proof.
+Code is heavily assisted with LLM but I know what I am doing and have spent human time. 
+Check git history for proof.
