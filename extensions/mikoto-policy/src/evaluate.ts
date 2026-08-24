@@ -25,8 +25,10 @@ export function evaluateRead(
     );
     const requestCanonicalPath = canonicalized.requestPath;
     const denyPaths = canonicalized.policy.filesystem.denyRead;
-    // A directory read also effectively requests every denied subtree it
-    // could traverse.
+   // Suupose we have a denyRead rule `project/secret`, we want to reject the directory read request
+   // `project/` is `secret` is contained in here.
+   // We don't want to enumerate all items in `project/` as paths being checked so see if they match any denyRead rule.
+   // Instead, we just enumerate `denyRead` paths that are inside `project/`.
     const effectiveRequestPaths = entity === "file"
       ? [requestCanonicalPath]
       : [
@@ -48,6 +50,16 @@ export function evaluateRead(
           isSameOrDescendant(denyPaths[denyRuleIndex], denyPaths[index])
         ) {
           denyRuleIndex = index;
+          // We don't break here, because we want to find deepest match
+          // For example, if both `/a` and `/a/b/c` deny rule match,
+          // we use `/a/b/c`.
+          //
+          // Using deepest match is required here because we require an allow rule
+          // to only be effective if  it is equal or more specific than the most specifically
+          // matched deny rule. For example, suppose we have allow rule `/a/b` and request
+          // is `/a/b/c/file`. The request is still rejected because allow rule `/a/b` is less
+          // specific than most specifically matched deny rule `/a/b/c`.
+          //
         }
       }
 
@@ -56,9 +68,10 @@ export function evaluateRead(
       const denyPath = denyPaths[denyRuleIndex];
       const isAllowed = canonicalized.policy.filesystem.allowRead.some(
         (allowPath) =>
-          // Request /project with deny /project/secrets and allow
-          // /project/secrets/public must keep the rest of secrets denied.
+          // We require the effectiveRequestPath is equal to or is a desendant of allow path
           isSameOrDescendant(allowPath, effectiveRequestPath) &&
+          // Also require the allow path to be more specific than denyPath (also described in previous inline comment
+          // on why we have to choose the deepest matched deny rule instead of first match)
           isSameOrDescendant(denyPath, allowPath),
       );
       if (!isAllowed) {
@@ -98,6 +111,10 @@ export function evaluateWrite(
           requestCanonicalPath,
         )
       ) {
+        // Unlike read, we don't match most specific path here.
+        // Match semantic is deny default -> allow then deny
+        // But we evaluate deny rules first if a file matches a deny,
+        // we could just reject without need to evaluating allow.
         return {
           allowed: false,
           deniedPath: policy.filesystem.denyWrite[index],
@@ -254,8 +271,13 @@ function isValidAllowRulePath(
   ruleLexicalPath: string,
   ruleCanonicalPath: string,
 ): boolean {
+  // An allow rule is valid iff
+  // - Its canonical path (i.e. symlink resolved path) equal to or a descendant of its lexical path.
+  //   Note that a canonical path being a descendant of its lexical path (e.g. /tmp/claude -> /tmp/claude/actual)
+  //   would produce an ELOOP but we guard them anyway, as a defensive thing.
   if (isSameOrDescendant(ruleLexicalPath, ruleCanonicalPath)) return true;
 
+  // Special case for MacOS, while we intentionally have this special case across platform, for consistency.
   if (
     ruleLexicalPath === "/tmp" ||
     ruleLexicalPath.startsWith("/tmp/") ||

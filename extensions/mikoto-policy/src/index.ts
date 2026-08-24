@@ -4,10 +4,12 @@ import {
   BUNDLED_POLICY_PATH,
   MikotoPolicyConfig,
 } from "./config.ts";
+import { enforcePiNativeTools } from "./native.ts";
 
 
-export default async function mikotoPolicy(_pi: ExtensionAPI): Promise<void> {
-  MikotoPolicyConfig.parse(JSON.parse(await readFile(BUNDLED_POLICY_PATH, "utf8")));
+export default async function mikotoPolicy(pi: ExtensionAPI): Promise<void> {
+  const policy = MikotoPolicyConfig.parse(JSON.parse(await readFile(BUNDLED_POLICY_PATH, "utf8")));
+  enforcePiNativeTools(policy, pi)
 }
 
 export {
