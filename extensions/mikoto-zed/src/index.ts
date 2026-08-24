@@ -120,26 +120,6 @@ export default function mikotoZed(pi: ExtensionAPI, options: ZedContextOptions =
 		}
 	};
 
-	pi.registerTool({
-		name: "zed_context",
-		label: "Mikoto Zed",
-		description:
-			"Read the active Zed editor file, cursor, and selections from Zed's local state database. Output is capped by PI_ZED_MAX_CONTEXT_BYTES (default 50 KiB).",
-		promptSnippet: "Read the active Zed editor file, cursor, and selections",
-		promptGuidelines: [
-			"Use zed_context when the user refers to their Zed editor, active file, cursor, current selection, highlighted code, or says things like 'this code'.",
-		],
-		parameters: Type.Object({}),
-		async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
-			const result = currentContext(ctx.cwd);
-			if (result.type === "unavailable") throw new Error(result.reason);
-			return {
-				content: [{ type: "text", text: result.type === "context" ? formatContext(result.context) : NO_CONTEXT_MESSAGE }],
-				details: result.type === "context" ? contextDetails(result.context) : { type: "empty" },
-			};
-		},
-	});
-
 	pi.registerCommand("zed-context", {
 		description: "Show the Zed context that will be passed to Pi",
 		handler: async (_args, ctx) => {
