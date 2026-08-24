@@ -1,6 +1,11 @@
+import {
+  access,
+  readFile,
+} from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import type { MikotoPolicyDocument } from "mikoto-types";
 import { z } from "zod";
 
@@ -79,6 +84,161 @@ export const MikotoPolicyConfig = z
   });
 
 export type MikotoPolicyConfig = z.infer<typeof MikotoPolicyConfig>;
+
+export type MikotoPolicyLoadResult = {
+  readonly document: MikotoPolicyDocument;
+  readonly warnings: readonly string[];
+};
+
+export class MikotoPolicyDocumentLoader {
+  private readonly bundledConfig: MikotoPolicyConfig;
+  private readonly globalConfigPath: string;
+  /**
+   * undefined: not loaded yet
+   * { valid: true, path }: file is missing
+   * { valid: true, path, config }: valid file loaded
+   * { valid: false, path, warnings }: file exists but invalid
+   */
+  private globalConfigState: undefined | {
+    valid: true
+    path: string
+    config: MikotoPolicyConfig | undefined
+  } | {
+    valid: false
+    path: string
+    warnings: readonly string[]
+  }
+  private latestMergedPolicy?: {
+    readonly cwd: string;
+    readonly cwdTrusted: boolean;
+    readonly workspaceConfigPath: string;
+    readonly result: MikotoPolicyLoadResult;
+  };
+
+  constructor(
+    bundledConfig: MikotoPolicyConfig,
+    globalConfigPath = path.join(
+      getAgentDir(),
+      "mikoto-policy.json",
+    ),
+  ) {
+    this.bundledConfig = bundledConfig;
+    this.globalConfigPath = globalConfigPath;
+  }
+
+  async load(
+    cwd: string,
+    cwdTrusted: boolean,
+  ): Promise<MikotoPolicyLoadResult> {
+    const normalizedCwd = path.resolve(cwd);
+    if (
+      normalizedCwd === this.latestMergedPolicy?.cwd &&
+      cwdTrusted === this.latestMergedPolicy.cwdTrusted
+    ) {
+      return this.latestMergedPolicy.result;
+    }
+
+    if (this.globalConfigState === undefined) {
+      try {
+        this.globalConfigState = {
+          valid: true,
+          path: this.globalConfigPath,
+          config: MikotoPolicyConfig.parse(
+            JSON.parse(await readFile(this.globalConfigPath, "utf8")),
+          ),
+        };
+      } catch (error) {
+        this.globalConfigState = isMissingFileError(error)
+          ? {
+              valid: true,
+              path: this.globalConfigPath,
+              config: undefined,
+            }
+          : {
+              valid: false,
+              path: this.globalConfigPath,
+              warnings: Object.freeze([
+                invalidPolicyWarning(this.globalConfigPath, error),
+              ]),
+            };
+      }
+    }
+
+    const layers = [this.bundledConfig];
+    const warnings: string[] = [];
+    if (this.globalConfigState.valid) {
+      if (this.globalConfigState.config) {
+        layers.push(this.globalConfigState.config);
+      }
+    } else {
+      warnings.push(...this.globalConfigState.warnings);
+    }
+    const workspaceConfigPath = path.join(
+      normalizedCwd,
+      "mikoto-policy.json",
+    );
+
+    if (this.globalConfigState.valid) {
+      // Only load workspace config if globalConfig is valid (exists and compliant, or missing)
+      if (cwdTrusted) {
+        try {
+          layers.push(
+            MikotoPolicyConfig.parse(
+              JSON.parse(await readFile(workspaceConfigPath, "utf8")),
+            ),
+          );
+        } catch (error) {
+          if (!isMissingFileError(error)) {
+            warnings.push(invalidPolicyWarning(workspaceConfigPath, error));
+          }
+        }
+      } else {
+        try {
+          await access(workspaceConfigPath);
+          warnings.push(
+            `Mikoto Policy skipped ${workspaceConfigPath} because the workspace is not trusted.`,
+          );
+        } catch (error) {
+          if (!isMissingFileError(error)) {
+            warnings.push(
+              `Mikoto Policy could not inspect ${workspaceConfigPath}: ${policyErrorMessage(error)}`,
+            );
+          }
+        }
+      }
+    }
+
+    const result = Object.freeze({
+      document: mergePolicyConfigs(layers, { cwd: normalizedCwd }),
+      warnings: Object.freeze(warnings),
+    });
+    this.latestMergedPolicy = {
+      cwd: normalizedCwd,
+      cwdTrusted,
+      workspaceConfigPath,
+      result,
+    };
+    return result;
+  }
+
+  async debugLoad(
+    cwd: string,
+    cwdTrusted: boolean,
+  ): Promise<MikotoPolicyLoadResult & {
+    readonly globalConfigPath: string;
+    readonly workspaceConfigPath: string;
+  }> {
+    const result = await this.load(cwd, cwdTrusted);
+    if (!this.globalConfigState || !this.latestMergedPolicy) {
+      throw new Error("Policy state was not loaded.");
+    }
+    return Object.freeze({
+      ...result,
+      globalConfigPath: this.globalConfigState.path,
+      workspaceConfigPath: this.latestMergedPolicy.workspaceConfigPath,
+    });
+  }
+}
 
 export function mergePolicyConfigs(
   layers: readonly MikotoPolicyConfig[],
@@ -184,4 +344,29 @@ function normalizePolicyPath(
   return path.isAbsolute(expandedPath)
     ? path.resolve(expandedPath)
     : path.resolve(cwd, expandedPath);
+}
+
+function isMissingFileError(error: unknown): boolean {
+  return (error as NodeJS.ErrnoException | undefined)?.code === "ENOENT";
+}
+
+function invalidPolicyWarning(
+  configPath: string,
+  error: unknown,
+): string {
+  return `Mikoto Policy ignored invalid policy at ${configPath}: ${policyErrorMessage(error)}`;
+}
+
+function policyErrorMessage(error: unknown): string {
+  if (error instanceof z.ZodError) {
+    return error.issues
+      .map((issue) => {
+        const issuePath = issue.path.length > 0
+          ? issue.path.join(".")
+          : "document";
+        return `${issuePath}: ${issue.message}`;
+      })
+      .join("; ");
+  }
+  return error instanceof Error ? error.message : String(error);
 }

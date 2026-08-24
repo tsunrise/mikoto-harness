@@ -3,10 +3,7 @@ import {
   isToolCallEventType,
   type ExtensionAPI,
 } from "@earendil-works/pi-coding-agent";
-import {
-  mergePolicyConfigs,
-  type MikotoPolicyConfig,
-} from "./config.ts";
+import type { MikotoPolicyDocumentLoader } from "./config.ts";
 import {
   evaluateRead,
   evaluateWrite,
@@ -17,9 +14,38 @@ const PERMISSION_PATH = fileURLToPath(
   new URL("../PERMISSION.md", import.meta.url),
 );
 
-export function enforcePiNativeTools(policy: MikotoPolicyConfig, pi: ExtensionAPI) {
-  pi.on("tool_call", (event, ctx) => {
-    const effectivePolicy = mergePolicyConfigs([policy], { cwd: ctx.cwd });
+const ENFORCED_TOOL_NAMES = new Set([
+  "read",
+  "grep",
+  "find",
+  "ls",
+  "write",
+  "edit",
+]);
+
+export function enforcePiNativeTools(
+  loader: MikotoPolicyDocumentLoader,
+  pi: ExtensionAPI,
+) {
+  const reportedWarnings = new Set<string>();
+
+  pi.on("tool_call", async (event, ctx) => {
+    if (!ENFORCED_TOOL_NAMES.has(event.toolName)) return;
+
+    const { document: effectivePolicy, warnings } = await loader.load(
+      ctx.cwd,
+      ctx.isProjectTrusted(),
+    );
+    for (const warning of warnings) {
+      if (reportedWarnings.has(warning)) continue;
+      reportedWarnings.add(warning);
+      if (ctx.hasUI) {
+        ctx.ui.notify(warning, "warning");
+      } else {
+        console.error(warning);
+      }
+    }
+
     let decision: ReturnType<typeof evaluateRead> | undefined;
 
     if (isToolCallEventType("read", event)) {

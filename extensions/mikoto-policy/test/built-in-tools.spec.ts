@@ -1,4 +1,11 @@
 import assert from "node:assert/strict";
+import {
+  mkdtemp,
+  rm,
+  writeFile,
+} from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
 import type {
@@ -7,7 +14,10 @@ import type {
   ToolCallEvent,
   ToolCallEventResult,
 } from "@earendil-works/pi-coding-agent";
-import type { MikotoPolicyConfig } from "../src/config.ts";
+import {
+  MikotoPolicyDocumentLoader,
+  type MikotoPolicyConfig,
+} from "../src/config.ts";
 import { enforcePiNativeTools } from "../src/built-in-tools.ts";
 
 type ToolCallHandler = (
@@ -15,7 +25,10 @@ type ToolCallHandler = (
   ctx: ExtensionContext,
 ) => ToolCallEventResult | undefined | Promise<ToolCallEventResult | undefined>;
 
-function registerHandler(policy: MikotoPolicyConfig): ToolCallHandler {
+function registerHandler(
+  policy: MikotoPolicyConfig,
+  globalConfigPath = "/mikoto-policy-native-test/global.json",
+): ToolCallHandler {
   let handler: ToolCallHandler | undefined;
   const pi = {
     on(eventName: string, registeredHandler: ToolCallHandler) {
@@ -24,7 +37,10 @@ function registerHandler(policy: MikotoPolicyConfig): ToolCallHandler {
     },
   } as unknown as ExtensionAPI;
 
-  enforcePiNativeTools(policy, pi);
+  enforcePiNativeTools(
+    new MikotoPolicyDocumentLoader(policy, globalConfigPath),
+    pi,
+  );
   assert.ok(handler);
   return handler;
 }
@@ -39,7 +55,11 @@ describe("enforcePiNativeTools", () => {
         denyWrite: ["readonly"],
       },
     });
-    const ctx = { cwd } as ExtensionContext;
+    const ctx = {
+      cwd,
+      hasUI: false,
+      isProjectTrusted: () => true,
+    } as ExtensionContext;
     const call = (
       toolName: string,
       input: Record<string, unknown>,
@@ -96,5 +116,109 @@ describe("enforcePiNativeTools", () => {
       await call("bash", { command: "cat secrets/token.txt" }),
       undefined,
     );
+  });
+
+  it("warns once when an untrusted workspace policy is skipped", async () => {
+    const cwd = await mkdtemp(
+      path.join(os.tmpdir(), "mikoto-policy-native-"),
+    );
+    try {
+      await writeFile(
+        path.join(cwd, "mikoto-policy.json"),
+        JSON.stringify({
+          filesystem: {
+            allowWrite: ["/"],
+          },
+        }),
+      );
+      const handler = registerHandler(
+        { filesystem: { allowWrite: ["."] } },
+        path.join(cwd, "missing-global.json"),
+      );
+      const notifications: string[] = [];
+      const ctx = {
+        cwd,
+        hasUI: true,
+        isProjectTrusted: () => false,
+        ui: {
+          notify(message: string) {
+            notifications.push(message);
+          },
+        },
+      } as unknown as ExtensionContext;
+      const event = {
+        type: "tool_call",
+        toolCallId: "call-1",
+        toolName: "write",
+        input: {
+          path: "file.txt",
+          content: "content",
+        },
+      } as ToolCallEvent;
+
+      assert.equal(await handler(event, ctx), undefined);
+      assert.equal(await handler(event, ctx), undefined);
+      assert.deepEqual(notifications, [
+        `Mikoto Policy skipped ${path.join(cwd, "mikoto-policy.json")} because the workspace is not trusted.`,
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it("writes warnings to stderr without UI and ignores unrelated tools", async () => {
+    const cwd = await mkdtemp(
+      path.join(os.tmpdir(), "mikoto-policy-native-"),
+    );
+    const globalConfigPath = path.join(cwd, "global.json");
+    await writeFile(globalConfigPath, "{");
+    const handler = registerHandler(
+      { filesystem: { allowWrite: ["."] } },
+      globalConfigPath,
+    );
+    const ctx = {
+      cwd,
+      hasUI: false,
+      isProjectTrusted: () => true,
+    } as ExtensionContext;
+    const warnings: string[] = [];
+    const originalConsoleError = console.error;
+    console.error = (warning: string) => {
+      warnings.push(warning);
+    };
+
+    try {
+      assert.equal(
+        await handler(
+          {
+            type: "tool_call",
+            toolCallId: "call-1",
+            toolName: "bash",
+            input: { command: "pwd" },
+          } as ToolCallEvent,
+          ctx,
+        ),
+        undefined,
+      );
+      assert.deepEqual(warnings, []);
+
+      assert.equal(
+        await handler(
+          {
+            type: "tool_call",
+            toolCallId: "call-2",
+            toolName: "read",
+            input: { path: "file.txt" },
+          } as ToolCallEvent,
+          ctx,
+        ),
+        undefined,
+      );
+      assert.equal(warnings.length, 1);
+      assert.match(warnings[0], /ignored invalid policy/);
+    } finally {
+      console.error = originalConsoleError;
+      await rm(cwd, { recursive: true, force: true });
+    }
   });
 });
