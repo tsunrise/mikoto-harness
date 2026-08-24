@@ -74,32 +74,29 @@ describe("registerViewConfigCommand", () => {
       );
       assert.ok(command);
 
-      let editorTitle: string | undefined;
-      let editorText: string | undefined;
+      let notificationText: string | undefined;
+      let notificationLevel: string | undefined;
       const ctx = {
         cwd,
         hasUI: true,
         isProjectTrusted: () => true,
         ui: {
-          async editor(title: string, text: string) {
-            editorTitle = title;
-            editorText = text;
-            return undefined;
+          notify(text: string, level: string) {
+            notificationText = text;
+            notificationLevel = level;
           },
         },
       } as unknown as ExtensionCommandContext;
       await command.handler("", ctx);
 
-      assert.equal(editorTitle, "Mikoto Policy");
-      assert.match(editorText ?? "", new RegExp(globalConfigPath));
-      assert.match(editorText ?? "", new RegExp(workspaceConfigPath));
-      assert.match(
-        editorText ?? "",
-        new RegExp(path.join(cwd, "global-secret")),
+      assert.equal(notificationLevel, "info");
+      assert.ok(notificationText?.includes(globalConfigPath));
+      assert.ok(notificationText?.includes(workspaceConfigPath));
+      assert.ok(
+        notificationText?.includes(path.join(cwd, "global-secret")),
       );
-      assert.match(
-        editorText ?? "",
-        new RegExp(path.join(cwd, "readonly")),
+      assert.ok(
+        notificationText?.includes(path.join(cwd, "readonly")),
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });
