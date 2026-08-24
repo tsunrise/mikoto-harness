@@ -30,7 +30,7 @@ export function registerViewConfigCommand(
       const text = output.join("\n");
 
       if (ctx.hasUI) {
-        await ctx.ui.editor("Mikoto Policy", text);
+        ctx.ui.notify(text, "info");
       } else {
         console.error(text);
       }
