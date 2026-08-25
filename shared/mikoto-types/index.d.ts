@@ -22,9 +22,50 @@ export type MikotoPolicyDocument = {
   };
 };
 
+export type MikotoPolicyDecision =
+  | {
+      readonly allowed: true;
+    }
+  | {
+      readonly allowed: false;
+      readonly deniedPath: string;
+    };
+
+export type MikotoPolicy = {
+  document(): MikotoPolicyDocument;
+  readonly permissionMdPath: string;
+  /**
+   * Converts a possibly relative Pi tool path to the absolute lexical path
+   * accepted by the evaluation methods.
+   *
+   * Relative paths are resolved against the policy's session working
+   * directory.
+   */
+  resolveToolPath(path: string): string;
+  /**
+   * @param path **Absolute** lexical path (could contain symlink).
+   */
+  evaluateRead(path: string): Promise<MikotoPolicyDecision>;
+  /**
+   * @param path **Absolute** lexical path (could contain symlink).
+   */
+  evaluateReadTree(path: string): Promise<MikotoPolicyDecision>;
+  /**
+   * @param path **Absolute** lexical path (could contain symlink).
+   */
+  evaluateWrite(path: string): Promise<MikotoPolicyDecision>;
+};
+
+export type MikotoPolicyGetPolicyEvent = {
+  readonly callback: (
+    policy: MikotoPolicy,
+  ) => void | Promise<void>;
+};
+
 /** Compile-time source of truth for Mikoto inter-extension event channels. */
 export type MikotoEventMap = {
 	readonly "mikoto-sound:sound": MikotoSoundEvent;
+  readonly "mikoto-policy:get-policy": MikotoPolicyGetPolicyEvent;
 };
 
 export type MikotoEventName = keyof MikotoEventMap;
