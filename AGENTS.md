@@ -31,8 +31,10 @@ When naming a skill:
 ## License
 
 All extensions, shared libraries, and skills respect the [LICENSE](LICENSE)
-file at repo root. No need to define another license file inside their package
-folders.
+file at repo root. We define another license file in their directory only if
+the extensions/libraries are MOSTLY COPIED from their source. An adapted
+skill/extension could just keep a README.md section acknowledging the author
+of original ideas without separate definition of LICENSE.
 
 ## Extension entry point
 

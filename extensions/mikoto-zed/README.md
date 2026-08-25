@@ -3,10 +3,12 @@
 Mikoto Zed is a Pi extension that passes the active Zed file, cursor, and
 selections to the `@earendil-works/pi-coding-agent` fork.
 
-Adapted from the upstream
+## Attribution
+
+This extension is adapted from the upstream
 [`dafunction/pi-zed-context`](https://github.com/dafunction/pi-zed-context)
-project (MIT). The database logic was independently compared with the OpenCode
-Zed implementation and with a current Zed SQLite schema.
+project by Alec G. The database logic was independently compared with the
+OpenCode Zed implementation and with a current Zed SQLite schema.
 
 ## What it does
 
@@ -100,9 +102,3 @@ npm run validate -w mikoto-zed
 # Or from this package directory:
 npm run validate
 ```
-
-## License
-
-MIT under the Mikoto Harness repository's root `LICENSE`. The original
-implementation is copyright Alec G; adaptation changes are copyright their
-contributors.
