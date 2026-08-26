@@ -1,0 +1,41 @@
+{
+  "name": "mikoto-apply-patch",
+  "version": "0.1.0",
+  "description": "Mikoto Apply Patch: a Codex-style apply_patch tool for Pi.",
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "apply-patch"
+  ],
+  "license": "MIT",
+  "type": "module",
+  "files": [
+    "index.ts",
+    "src",
+    "native"
+  ],
+  "scripts": {
+    "build": "napi build --cwd . --manifest-path Cargo.toml --package apply-patch-napi --package-json-path package.json --output-dir native --platform --esm --release",
+    "build:debug": "napi build --cwd . --manifest-path Cargo.toml --package apply-patch-napi --package-json-path package.json --output-dir native --platform --esm",
+    "precheck": "npm run build:debug",
+    "check": "tsc --noEmit",
+    "validate": "npm run check"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "^0.84.2",
+    "@napi-rs/cli": "^3.8.6",
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0"
+  },
+  "napi": {
+    "binaryName": "mikoto-apply-patch"
+  },
+  "pi": {
+    "extensions": [
+      "./index.ts"
+    ]
+  }
+}

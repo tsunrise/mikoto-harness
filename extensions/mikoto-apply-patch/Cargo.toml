@@ -1,0 +1,3 @@
+[workspace]
+resolver = "3"
+members = ["apply-patch-core", "apply-patch-napi"]
