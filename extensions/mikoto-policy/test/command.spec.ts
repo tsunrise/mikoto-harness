@@ -16,9 +16,10 @@ import {
   MikotoPolicyDocumentLoader,
   PERMISSION_PATH,
 } from "../src/config.ts";
+import { getCanonicalPath } from "../src/canonical-path.ts";
 
 describe("registerViewConfigCommand", () => {
-  it("registers a manual command that displays paths and merged policy", async () => {
+  it("registers a manual command that displays paths and resolved policy", async () => {
     const cwd = await mkdtemp(
       path.join(os.tmpdir(), "mikoto-policy-command-"),
     );
@@ -73,7 +74,7 @@ describe("registerViewConfigCommand", () => {
       assert.equal(commandName, "mikoto-policy:view");
       assert.equal(
         command?.description,
-        "View the effective Mikoto policy configuration",
+        "View the resolved Mikoto policy",
       );
       assert.ok(command);
 
@@ -97,10 +98,14 @@ describe("registerViewConfigCommand", () => {
       assert.ok(notificationText?.includes(workspaceConfigPath));
       assert.ok(notificationText?.includes(PERMISSION_PATH));
       assert.ok(
-        notificationText?.includes(path.join(cwd, "global-secret")),
+        notificationText?.includes(
+          getCanonicalPath(path.join(cwd, "global-secret")),
+        ),
       );
       assert.ok(
-        notificationText?.includes(path.join(cwd, "readonly")),
+        notificationText?.includes(
+          getCanonicalPath(path.join(cwd, "readonly")),
+        ),
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });

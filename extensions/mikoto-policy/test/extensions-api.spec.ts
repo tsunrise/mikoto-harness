@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import {
+  mkdtemp,
+  rm,
+  symlink,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
@@ -91,33 +95,92 @@ describe("provideExtensionsApi", () => {
         received.resolveToolPath("secret/file.txt"),
         path.join(cwd, "secret", "file.txt"),
       );
+      const canonicalCwd = await received.canonicalizePath(cwd);
+      assert.equal(
+        await received.canonicalizePath(
+          path.join(cwd, "missing", "file.txt"),
+        ),
+        path.join(canonicalCwd, "missing", "file.txt"),
+      );
       const document = received.document();
       assert.ok(Object.isFrozen(document));
       assert.ok(Object.isFrozen(document.filesystem));
       assert.ok(Object.isFrozen(document.filesystem.denyRead));
       assert.deepEqual(structuredClone(document), document);
       assert.deepEqual(
-        await received.evaluateRead(path.join(cwd, "secret", "file.txt")),
+        await received.evaluateRead(
+          path.join(canonicalCwd, "secret", "file.txt"),
+        ),
         {
           allowed: false,
-          deniedPath: path.join(cwd, "secret"),
+          deniedPath: path.join(canonicalCwd, "secret"),
         },
       );
-      assert.deepEqual(await received.evaluateReadTree(cwd), {
+      assert.deepEqual(await received.evaluateReadTree(canonicalCwd), {
         allowed: false,
-        deniedPath: path.join(cwd, "secret"),
+        deniedPath: path.join(canonicalCwd, "secret"),
       });
       assert.deepEqual(
-        await received.evaluateWrite(path.join(cwd, "file.txt")),
+        await received.evaluateWrite(
+          path.join(canonicalCwd, "file.txt"),
+        ),
         { allowed: true },
       );
       assert.deepEqual(
-        await received.evaluateWrite(path.join(cwd, "readonly", "file.txt")),
+        await received.evaluateWrite(
+          path.join(canonicalCwd, "readonly", "file.txt"),
+        ),
         {
           allowed: false,
-          deniedPath: path.join(cwd, "readonly"),
+          deniedPath: path.join(canonicalCwd, "readonly"),
         },
       );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it("reports dropped policy rules during session initialization", async () => {
+    const cwd = await mkdtemp(
+      path.join(os.tmpdir(), "mikoto-policy-api-"),
+    );
+    try {
+      const firstLink = path.join(cwd, "first");
+      const secondLink = path.join(cwd, "second");
+      await symlink(secondLink, firstLink);
+      await symlink(firstLink, secondLink);
+
+      let sessionStart: SessionStartHandler | undefined;
+      const notifications: string[] = [];
+      const pi = {
+        on(_name: string, handler: SessionStartHandler) {
+          sessionStart = handler;
+        },
+        events: {
+          on() {},
+        },
+      } as unknown as ExtensionAPI;
+      provideExtensionsApi(
+        new MikotoPolicyDocumentLoader(
+          { filesystem: { denyRead: [firstLink] } },
+          path.join(cwd, "missing-global.json"),
+        ),
+        pi,
+      );
+      assert.ok(sessionStart);
+
+      await sessionStart({}, {
+        cwd,
+        hasUI: true,
+        isProjectTrusted: () => true,
+        ui: {
+          notify(message: string) {
+            notifications.push(message);
+          },
+        },
+      } as unknown as ExtensionContext);
+
+      assert.deepEqual(notifications, [firstLink]);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

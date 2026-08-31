@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import type { MikotoPolicyDocument } from "mikoto-types";
 import { z } from "zod";
+import { resolvePolicyFileSystemCanonicalPaths } from "./resolve-policy-paths.ts";
 
 export const BUNDLED_POLICY_PATH = fileURLToPath(
   new URL("../mikoto-policy.default.json", import.meta.url),
@@ -112,12 +113,10 @@ export class MikotoPolicyDocumentLoader {
     path: string
     warnings: readonly string[]
   }
-  private latestMergedPolicy?: {
-    readonly cwd: string;
-    readonly cwdTrusted: boolean;
+  private readonly loadedPolicies = new Map<string, {
     readonly workspaceConfigPath: string;
     readonly result: MikotoPolicyLoadResult;
-  };
+  }>();
 
   constructor(
     bundledConfig: MikotoPolicyConfig,
@@ -135,12 +134,9 @@ export class MikotoPolicyDocumentLoader {
     cwdTrusted: boolean,
   ): Promise<MikotoPolicyLoadResult> {
     const normalizedCwd = path.resolve(cwd);
-    if (
-      normalizedCwd === this.latestMergedPolicy?.cwd &&
-      cwdTrusted === this.latestMergedPolicy.cwdTrusted
-    ) {
-      return this.latestMergedPolicy.result;
-    }
+    const cacheKey = policyCacheKey(normalizedCwd, cwdTrusted);
+    const cached = this.loadedPolicies.get(cacheKey);
+    if (cached) return cached.result;
 
     if (this.globalConfigState === undefined) {
       try {
@@ -212,16 +208,22 @@ export class MikotoPolicyDocumentLoader {
       }
     }
 
+    const mergedFileSystemPaths = mergePolicyConfigs(
+      layers,
+      { cwd: normalizedCwd },
+    );
+    const resolvedPolicy = resolvePolicyFileSystemCanonicalPaths(
+      { filesystem: mergedFileSystemPaths },
+    );
+    warnings.push(...resolvedPolicy.warnings);
     const result = Object.freeze({
-      document: mergePolicyConfigs(layers, { cwd: normalizedCwd }),
+      document: resolvedPolicy.document,
       warnings: Object.freeze(warnings),
     });
-    this.latestMergedPolicy = {
-      cwd: normalizedCwd,
-      cwdTrusted,
+    this.loadedPolicies.set(cacheKey, {
       workspaceConfigPath,
       result,
-    };
+    });
     return result;
   }
 
@@ -233,24 +235,31 @@ export class MikotoPolicyDocumentLoader {
     readonly workspaceConfigPath: string;
   }> {
     const result = await this.load(cwd, cwdTrusted);
-    if (!this.globalConfigState || !this.latestMergedPolicy) {
+    const loadedPolicy = this.loadedPolicies.get(
+      policyCacheKey(path.resolve(cwd), cwdTrusted),
+    );
+    if (!this.globalConfigState || !loadedPolicy) {
       throw new Error("Policy state was not loaded.");
     }
     return Object.freeze({
       ...result,
       globalConfigPath: this.globalConfigState.path,
-      workspaceConfigPath: this.latestMergedPolicy.workspaceConfigPath,
+      workspaceConfigPath: loadedPolicy.workspaceConfigPath,
     });
   }
 }
 
-export function mergePolicyConfigs(
+function policyCacheKey(cwd: string, cwdTrusted: boolean): string {
+  return `${cwd}\0${cwdTrusted ? "trusted" : "untrusted"}`;
+}
+
+function mergePolicyConfigs(
   layers: readonly MikotoPolicyConfig[],
   options: {
     readonly cwd: string;
     readonly homeDir?: string;
   },
-): MikotoPolicyDocument {
+) {
   const merged = {
     denyRead: [] as FsPath[],
     allowRead: [] as FsPath[],
@@ -286,14 +295,12 @@ export function mergePolicyConfigs(
   }
 
   const homeDir = options.homeDir ?? homedir();
-  const filesystem = Object.freeze({
+  return Object.freeze({
     denyRead: normalizeAndFreeze(merged.denyRead, options.cwd, homeDir),
     allowRead: normalizeAndFreeze(merged.allowRead, options.cwd, homeDir),
     allowWrite: normalizeAndFreeze(merged.allowWrite, options.cwd, homeDir),
     denyWrite: normalizeAndFreeze(merged.denyWrite, options.cwd, homeDir),
   });
-
-  return Object.freeze({ filesystem });
 }
 
 /**

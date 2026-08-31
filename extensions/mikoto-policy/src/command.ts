@@ -10,7 +10,7 @@ export function registerViewConfigCommand(
   pi: ExtensionAPI,
 ) {
   pi.registerCommand("mikoto-policy:view", {
-    description: "View the effective Mikoto policy configuration",
+    description: "View the resolved Mikoto policy",
     handler: async (_args, ctx) => {
       const loaded = await loader.debugLoad(
         ctx.cwd,
@@ -21,7 +21,7 @@ export function registerViewConfigCommand(
         `Workspace config: ${loaded.workspaceConfigPath}`,
         `Policy documentation: ${PERMISSION_PATH}`,
         "",
-        "Merged config:",
+        "Resolved policy:",
         JSON.stringify(loaded.document, null, 2),
       ];
       if (loaded.warnings.length > 0) {

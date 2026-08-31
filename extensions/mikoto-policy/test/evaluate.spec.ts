@@ -10,9 +10,11 @@ import path from "node:path";
 import { describe, it } from "node:test";
 import type { MikotoPolicyDocument } from "mikoto-types";
 import {
-  evaluateRead,
-  evaluateWrite,
+  evaluateRead as evaluateCanonicalRead,
+  evaluateWrite as evaluateCanonicalWrite,
 } from "../src/evaluate.ts";
+import { getCanonicalPath } from "../src/canonical-path.ts";
+import { resolvePolicyFileSystemCanonicalPaths } from "../src/resolve-policy-paths.ts";
 
 const VIRTUAL_ROOT = "/mikoto-policy-evaluate-tests";
 
@@ -32,6 +34,44 @@ function createPolicy(
       ...filesystem,
     },
   };
+}
+
+/**
+ * Compose request preparation with the canonical-only evaluator so the policy
+ * semantics below remain concise. Dedicated tests cover the phase boundary.
+ */
+function evaluateRead(
+  policy: MikotoPolicyDocument,
+  lexicalPath: string,
+  entity: "file" | "directory",
+) {
+  try {
+    const canonicalPath = getCanonicalPath(lexicalPath);
+    const decision = evaluateCanonicalRead(
+      resolvePolicyFileSystemCanonicalPaths(policy).document,
+      canonicalPath,
+      entity,
+    );
+    return decision;
+  } catch {
+    return { allowed: false as const, deniedPath: lexicalPath };
+  }
+}
+
+function evaluateWrite(
+  policy: MikotoPolicyDocument,
+  lexicalPath: string,
+) {
+  try {
+    const canonicalPath = getCanonicalPath(lexicalPath);
+    const decision = evaluateCanonicalWrite(
+      resolvePolicyFileSystemCanonicalPaths(policy).document,
+      canonicalPath,
+    );
+    return decision;
+  } catch {
+    return { allowed: false as const, deniedPath: lexicalPath };
+  }
 }
 
 async function withTempDirectory(
@@ -414,6 +454,92 @@ describe("evaluateWrite", () => {
   });
 });
 
+describe("canonical-only evaluation boundary", () => {
+  it("trusts path inputs and performs matching without validation", () => {
+    assert.deepEqual(
+      evaluateCanonicalWrite(
+        createPolicy({ allowWrite: ["relative"] }),
+        path.join("relative", "file.txt"),
+      ),
+      { allowed: true },
+    );
+  });
+
+  it("does not resolve a symlink path passed directly to evaluation", async () => {
+    await withTempDirectory(async (directory) => {
+      const allowedPath = path.join(directory, "allowed");
+      const aliasPath = path.join(directory, "alias");
+      await mkdir(allowedPath);
+      await symlink(allowedPath, aliasPath);
+      const resolvedPolicy = resolvePolicyFileSystemCanonicalPaths(
+        createPolicy({ allowWrite: [allowedPath] }),
+      ).document;
+
+      assert.deepEqual(
+        evaluateCanonicalWrite(
+          resolvedPolicy,
+          path.join(aliasPath, "file.txt"),
+        ),
+        {
+          allowed: false,
+          deniedPath: path.join(aliasPath, "file.txt"),
+        },
+      );
+      assert.deepEqual(
+        evaluateCanonicalWrite(
+          resolvedPolicy,
+          getCanonicalPath(path.join(aliasPath, "file.txt")),
+        ),
+        { allowed: true },
+      );
+    });
+  });
+
+  it("pins canonical policy rules during policy resolution", async () => {
+    await withTempDirectory(async (directory) => {
+      const firstTarget = path.join(directory, "first");
+      const secondTarget = path.join(directory, "second");
+      const aliasPath = path.join(directory, "alias");
+      await mkdir(firstTarget);
+      await mkdir(secondTarget);
+      await symlink(firstTarget, aliasPath);
+
+      const resolvedPolicy = resolvePolicyFileSystemCanonicalPaths(
+        createPolicy({ denyRead: [aliasPath] }),
+      ).document;
+      const firstCanonicalPath = getCanonicalPath(
+        path.join(aliasPath, "file.txt"),
+      );
+
+      await rm(aliasPath);
+      await symlink(secondTarget, aliasPath);
+      const secondCanonicalPath = getCanonicalPath(
+        path.join(aliasPath, "file.txt"),
+      );
+
+      assert.deepEqual(
+        evaluateCanonicalRead(
+          resolvedPolicy,
+          firstCanonicalPath,
+          "file",
+        ),
+        {
+          allowed: false,
+          deniedPath: resolvedPolicy.filesystem.denyRead[0],
+        },
+      );
+      assert.deepEqual(
+        evaluateCanonicalRead(
+          resolvedPolicy,
+          secondCanonicalPath,
+          "file",
+        ),
+        { allowed: true },
+      );
+    });
+  });
+});
+
 describe("symlink evaluation", () => {
   it("denies a write that escapes an allowed root through a child symlink", async () => {
     await withTempDirectory(async (directory) => {
@@ -429,7 +555,10 @@ describe("symlink evaluation", () => {
           createPolicy({ allowWrite: [allowedPath] }),
           requestedPath,
         ),
-        { allowed: false, deniedPath: requestedPath },
+        {
+          allowed: false,
+          deniedPath: getCanonicalPath(requestedPath),
+        },
       );
     });
   });
@@ -465,7 +594,10 @@ describe("symlink evaluation", () => {
       const requestedPath = path.join(allowedPath, "file.txt");
       assert.deepEqual(
         evaluateWrite(policy, requestedPath),
-        { allowed: false, deniedPath: requestedPath },
+        {
+          allowed: false,
+          deniedPath: getCanonicalPath(requestedPath),
+        },
       );
     });
   });
@@ -481,6 +613,7 @@ describe("symlink evaluation", () => {
         allowWrite: [allowedPath],
         denyWrite: [deniedAlias],
       });
+      const canonicalDeniedPath = getCanonicalPath(deniedAlias);
 
       for (const requestedPath of [
         path.join(deniedTarget, "file.txt"),
@@ -488,7 +621,7 @@ describe("symlink evaluation", () => {
       ]) {
         assert.deepEqual(
           evaluateWrite(policy, requestedPath),
-          { allowed: false, deniedPath: deniedAlias },
+          { allowed: false, deniedPath: canonicalDeniedPath },
         );
       }
     });
@@ -508,7 +641,10 @@ describe("symlink evaluation", () => {
           }),
           deniedTarget,
         ),
-        { allowed: false, deniedPath: deniedAlias },
+        {
+          allowed: false,
+          deniedPath: getCanonicalPath(deniedAlias),
+        },
       );
     });
   });
@@ -537,6 +673,7 @@ describe("symlink evaluation", () => {
       await mkdir(deniedTarget);
       await symlink(deniedTarget, deniedAlias);
       const policy = createPolicy({ denyRead: [deniedAlias] });
+      const canonicalDeniedPath = getCanonicalPath(deniedAlias);
 
       for (const requestedPath of [
         path.join(deniedTarget, "file.txt"),
@@ -544,7 +681,7 @@ describe("symlink evaluation", () => {
       ]) {
         assert.deepEqual(
           evaluateRead(policy, requestedPath, "file"),
-          { allowed: false, deniedPath: deniedAlias },
+          { allowed: false, deniedPath: canonicalDeniedPath },
         );
       }
     });
@@ -556,17 +693,24 @@ describe("symlink evaluation", () => {
       const allowedAlias = path.join(directory, "allowed-alias");
       await mkdir(deniedTarget);
       await symlink(deniedTarget, allowedAlias);
+      const resolved = resolvePolicyFileSystemCanonicalPaths(
+        createPolicy({
+          denyRead: [deniedTarget],
+          allowRead: [allowedAlias],
+        }),
+      );
 
+      assert.deepEqual(resolved.warnings, [allowedAlias]);
       assert.deepEqual(
-        evaluateRead(
-          createPolicy({
-            denyRead: [deniedTarget],
-            allowRead: [allowedAlias],
-          }),
-          path.join(deniedTarget, "file.txt"),
+        evaluateCanonicalRead(
+          resolved.document,
+          getCanonicalPath(path.join(deniedTarget, "file.txt")),
           "file",
         ),
-        { allowed: false, deniedPath: deniedTarget },
+        {
+          allowed: false,
+          deniedPath: getCanonicalPath(deniedTarget),
+        },
       );
     });
   });
@@ -621,7 +765,7 @@ describe("resolution failures", () => {
     });
   });
 
-  it("fails reads closed when any denyRead rule is cyclic", async () => {
+  it("drops cyclic denyRead rules with a warning", async () => {
     await withTempDirectory(async (directory) => {
       const firstLink = path.join(directory, "first");
       const secondLink = path.join(directory, "second");
@@ -629,18 +773,22 @@ describe("resolution failures", () => {
       await symlink(firstLink, secondLink);
       const requestedPath = path.join(directory, "unrelated.txt");
 
+      const resolved = resolvePolicyFileSystemCanonicalPaths(
+        createPolicy({ denyRead: [firstLink] }),
+      );
+      assert.deepEqual(resolved.warnings, [firstLink]);
       assert.deepEqual(
-        evaluateRead(
-          createPolicy({ denyRead: [firstLink] }),
-          requestedPath,
+        evaluateCanonicalRead(
+          resolved.document,
+          getCanonicalPath(requestedPath),
           "file",
         ),
-        { allowed: false, deniedPath: requestedPath },
+        { allowed: true },
       );
     });
   });
 
-  it("fails writes closed when any denyWrite rule is cyclic", async () => {
+  it("drops cyclic denyWrite rules with a warning", async () => {
     await withTempDirectory(async (directory) => {
       const firstLink = path.join(directory, "first");
       const secondLink = path.join(directory, "second");
@@ -648,15 +796,19 @@ describe("resolution failures", () => {
       await symlink(firstLink, secondLink);
       const requestedPath = path.join(directory, "allowed.txt");
 
+      const resolved = resolvePolicyFileSystemCanonicalPaths(
+        createPolicy({
+          allowWrite: [directory],
+          denyWrite: [firstLink],
+        }),
+      );
+      assert.deepEqual(resolved.warnings, [firstLink]);
       assert.deepEqual(
-        evaluateWrite(
-          createPolicy({
-            allowWrite: [directory],
-            denyWrite: [firstLink],
-          }),
-          requestedPath,
+        evaluateCanonicalWrite(
+          resolved.document,
+          getCanonicalPath(requestedPath),
         ),
-        { allowed: false, deniedPath: requestedPath },
+        { allowed: true },
       );
     });
   });
@@ -679,7 +831,10 @@ describe("resolution failures", () => {
           path.join(directory, "file.txt"),
           "file",
         ),
-        { allowed: false, deniedPath: directory },
+        {
+          allowed: false,
+          deniedPath: getCanonicalPath(directory),
+        },
       );
       assert.deepEqual(
         evaluateWrite(
@@ -688,6 +843,25 @@ describe("resolution failures", () => {
         ),
         { allowed: true },
       );
+    });
+  });
+
+  it("retains canonical rules with missing suffixes", async () => {
+    await withTempDirectory(async (directory) => {
+      const missingRule = path.join(
+        directory,
+        "missing",
+        "nested",
+        ".env",
+      );
+      const resolved = resolvePolicyFileSystemCanonicalPaths(
+        createPolicy({ denyRead: [missingRule] }),
+      );
+
+      assert.deepEqual(resolved.warnings, []);
+      assert.deepEqual(resolved.document.filesystem.denyRead, [
+        getCanonicalPath(missingRule),
+      ]);
     });
   });
 });

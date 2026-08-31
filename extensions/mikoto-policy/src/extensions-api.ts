@@ -12,6 +12,7 @@ import {
   evaluateRead,
   evaluateWrite,
 } from "./evaluate.ts";
+import { getCanonicalPath } from "./canonical-path.ts";
 import { resolveToolPath } from "./utils.ts";
 
 export function provideExtensionsApi(
@@ -20,14 +21,21 @@ export function provideExtensionsApi(
 ) {
   let policy: MikotoPolicy | undefined;
 
-  // Unlike built-in tools, custom `events.on` doesn't carry ctx for `cwd` and `isProjectTrusted`,
-  // so we have to parse the policy on session start.
+  // Unlike built-in tools, custom `events.on` does not carry ctx for `cwd` and
+  // `isProjectTrusted`, so we load and resolve the policy during session start.
   pi.on("session_start", async (_event, ctx) => {
     policy = undefined;
     const loaded = await loader.load(
       ctx.cwd,
       ctx.isProjectTrusted(),
     );
+    for (const warning of loaded.warnings) {
+      if (ctx.hasUI) {
+        ctx.ui.notify(warning, "warning");
+      } else {
+        console.error(warning);
+      }
+    }
     policy = createPolicy(loaded.document, ctx.cwd);
   });
 
@@ -56,12 +64,14 @@ function createPolicy(
     document: () => document,
     permissionMdPath: PERMISSION_PATH,
     resolveToolPath: (path: string) => resolveToolPath(path, cwd),
-    evaluateRead: async (path: string) =>
-      evaluateRead(document, path, "file"),
-    evaluateReadTree: async (path: string) =>
-      evaluateRead(document, path, "directory"),
-    evaluateWrite: async (path: string) =>
-      evaluateWrite(document, path),
+    canonicalizePath: async (lexicalPath: string) =>
+      getCanonicalPath(lexicalPath),
+    evaluateRead: async (canonicalPath: string) =>
+      evaluateRead(document, canonicalPath, "file"),
+    evaluateReadTree: async (canonicalPath: string) =>
+      evaluateRead(document, canonicalPath, "directory"),
+    evaluateWrite: async (canonicalPath: string) =>
+      evaluateWrite(document, canonicalPath),
   });
 }
 

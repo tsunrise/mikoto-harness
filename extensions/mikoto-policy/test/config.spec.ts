@@ -3,6 +3,7 @@ import {
   mkdir,
   mkdtemp,
   rm,
+  symlink,
   writeFile,
 } from "node:fs/promises";
 import os from "node:os";
@@ -12,6 +13,7 @@ import {
   MikotoPolicyDocumentLoader,
   type MikotoPolicyConfig,
 } from "../src/config.ts";
+import { getCanonicalPath } from "../src/canonical-path.ts";
 
 const bundledConfig: MikotoPolicyConfig = {
   filesystem: {
@@ -69,14 +71,14 @@ describe("MikotoPolicyDocumentLoader", () => {
       assert.deepEqual(result.warnings, []);
       assert.deepEqual(result.document.filesystem, {
         denyRead: [
-          path.join(cwd, "global-secret"),
-          path.join(cwd, "workspace-secret"),
+          getCanonicalPath(path.join(cwd, "global-secret")),
+          getCanonicalPath(path.join(cwd, "workspace-secret")),
         ],
         allowRead: [],
         allowWrite: [
-          cwd,
-          path.join(cwd, "global-output"),
-          path.join(cwd, "workspace-output"),
+          getCanonicalPath(cwd),
+          getCanonicalPath(path.join(cwd, "global-output")),
+          getCanonicalPath(path.join(cwd, "workspace-output")),
         ],
         denyWrite: [],
       });
@@ -130,10 +132,35 @@ describe("MikotoPolicyDocumentLoader", () => {
       const second = await loader.load(secondCwd, true);
 
       assert.deepEqual(first.document.filesystem.allowWrite, [
-        path.join(firstCwd, "global-output"),
+        getCanonicalPath(path.join(firstCwd, "global-output")),
       ]);
       assert.deepEqual(second.document.filesystem.allowWrite, [
-        path.join(secondCwd, "global-output"),
+        getCanonicalPath(path.join(secondCwd, "global-output")),
+      ]);
+    });
+  });
+
+  it("pins canonical policy paths for the loader lifetime", async () => {
+    await withTempDirectory(async (cwd) => {
+      const firstTarget = path.join(cwd, "first");
+      const secondTarget = path.join(cwd, "second");
+      const alias = path.join(cwd, "alias");
+      await mkdir(firstTarget);
+      await mkdir(secondTarget);
+      await symlink(firstTarget, alias);
+      const loader = new MikotoPolicyDocumentLoader(
+        { filesystem: { denyRead: [alias] } },
+        path.join(cwd, "missing-global.json"),
+      );
+
+      const first = await loader.load(cwd, true);
+      await rm(alias);
+      await symlink(secondTarget, alias);
+      const second = await loader.load(cwd, true);
+
+      assert.strictEqual(second, first);
+      assert.deepEqual(first.document.filesystem.denyRead, [
+        getCanonicalPath(firstTarget),
       ]);
     });
   });
@@ -146,7 +173,9 @@ describe("MikotoPolicyDocumentLoader", () => {
       ).load(cwd, true);
 
       assert.deepEqual(result.warnings, []);
-      assert.deepEqual(result.document.filesystem.allowWrite, [cwd]);
+      assert.deepEqual(result.document.filesystem.allowWrite, [
+        getCanonicalPath(cwd),
+      ]);
     });
   });
 
@@ -167,7 +196,9 @@ describe("MikotoPolicyDocumentLoader", () => {
       );
 
       const untrusted = await loader.load(cwd, false);
-      assert.deepEqual(untrusted.document.filesystem.allowWrite, [cwd]);
+      assert.deepEqual(untrusted.document.filesystem.allowWrite, [
+        getCanonicalPath(cwd),
+      ]);
       assert.deepEqual(untrusted.warnings, [
         `Mikoto Policy skipped ${workspaceConfigPath} because the workspace is not trusted.`,
       ]);
@@ -196,7 +227,9 @@ describe("MikotoPolicyDocumentLoader", () => {
         globalConfigPath,
       ).load(cwd, true);
 
-      assert.deepEqual(result.document.filesystem.allowWrite, [cwd]);
+      assert.deepEqual(result.document.filesystem.allowWrite, [
+        getCanonicalPath(cwd),
+      ]);
       assert.equal(result.warnings.length, 1);
       assert.match(result.warnings[0], /ignored invalid policy/);
       assert.match(result.warnings[0], /global\.json/);
@@ -230,7 +263,7 @@ describe("MikotoPolicyDocumentLoader", () => {
       ).load(cwd, true);
 
       assert.deepEqual(result.document.filesystem.allowWrite, [
-        path.join(cwd, "global-output"),
+        getCanonicalPath(path.join(cwd, "global-output")),
       ]);
       assert.equal(result.warnings.length, 1);
       assert.match(result.warnings[0], /ignored invalid policy/);

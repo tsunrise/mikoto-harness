@@ -35,10 +35,10 @@ value from the previous layer.
 Filesystem paths are literal and do not support glob syntax. They may be
 absolute, relative to the workspace, or start with `~/`.
 
-Permissions apply to a configured path and its descendants. Paths are
-evaluated after resolving symlinks. A deny rule therefore applies through
-aliases to the same target. An allow rule cannot grant access outside its
-configured path boundary.
+Permissions apply to a configured path and its descendants. Paths are matched
+after resolving symlink redirections to their canonical targets, so a deny
+rule also applies through aliases to the same target. An allow rule cannot
+grant access outside its configured path boundary.
 
 ### Read
 

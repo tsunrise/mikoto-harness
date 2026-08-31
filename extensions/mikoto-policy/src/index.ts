@@ -21,7 +21,6 @@ export default async function mikotoPolicy(pi: ExtensionAPI): Promise<void> {
 
 export {
   BUNDLED_POLICY_PATH,
-  mergePolicyConfigs,
   MikotoPolicyConfig,
   MikotoPolicyDocumentLoader,
   PERMISSION_PATH,

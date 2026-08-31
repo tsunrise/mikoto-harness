@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import {
+  mkdir,
   mkdtemp,
   rm,
-  writeFile,
+  symlink,
 } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -19,6 +20,7 @@ import {
   type MikotoPolicyConfig,
 } from "../src/config.ts";
 import { enforcePiNativeTools } from "../src/built-in-tools.ts";
+import { getCanonicalPath } from "../src/canonical-path.ts";
 
 type ToolCallHandler = (
   event: ToolCallEvent,
@@ -91,12 +93,18 @@ describe("enforcePiNativeTools", () => {
         blocked,
       );
     }
+    const writeInput = {
+      path: "src/file.ts",
+      content: "content",
+    };
+    assert.equal(await call("write", writeInput), undefined);
+    assert.equal(writeInput.path, path.join(cwd, "src", "file.ts"));
+
+    const readInput = { path: "public/file.ts" };
+    assert.equal(await call("read", readInput), undefined);
     assert.equal(
-      await call("write", {
-        path: "src/file.ts",
-        content: "content",
-      }),
-      undefined,
+      readInput.path,
+      path.join(cwd, "public", "file.ts"),
     );
     assert.deepEqual(
       await call("write", {
@@ -118,107 +126,96 @@ describe("enforcePiNativeTools", () => {
     );
   });
 
-  it("warns once when an untrusted workspace policy is skipped", async () => {
+  it("pins an approved canonical path into the native tool input", async () => {
     const cwd = await mkdtemp(
       path.join(os.tmpdir(), "mikoto-policy-native-"),
     );
     try {
-      await writeFile(
-        path.join(cwd, "mikoto-policy.json"),
-        JSON.stringify({
-          filesystem: {
-            allowWrite: ["/"],
-          },
-        }),
-      );
+      const target = path.join(cwd, "target");
+      const replacement = path.join(cwd, "replacement");
+      const alias = path.join(cwd, "alias");
+      await mkdir(target);
+      await mkdir(replacement);
+      await symlink(target, alias);
+
       const handler = registerHandler(
-        { filesystem: { allowWrite: ["."] } },
+        { filesystem: { allowWrite: ["target"] } },
         path.join(cwd, "missing-global.json"),
       );
-      const notifications: string[] = [];
       const ctx = {
         cwd,
-        hasUI: true,
-        isProjectTrusted: () => false,
-        ui: {
-          notify(message: string) {
-            notifications.push(message);
-          },
-        },
-      } as unknown as ExtensionContext;
+        hasUI: false,
+        isProjectTrusted: () => true,
+      } as ExtensionContext;
+      const input = {
+        path: "alias/file.txt",
+        content: "content",
+      };
       const event = {
         type: "tool_call",
         toolCallId: "call-1",
         toolName: "write",
-        input: {
-          path: "file.txt",
-          content: "content",
-        },
+        input,
       } as ToolCallEvent;
 
       assert.equal(await handler(event, ctx), undefined);
-      assert.equal(await handler(event, ctx), undefined);
-      assert.deepEqual(notifications, [
-        `Mikoto Policy skipped ${path.join(cwd, "mikoto-policy.json")} because the workspace is not trusted.`,
-      ]);
+      assert.equal(
+        input.path,
+        getCanonicalPath(path.join(target, "file.txt")),
+      );
+
+      await rm(alias);
+      await symlink(replacement, alias);
+      assert.equal(
+        input.path,
+        getCanonicalPath(path.join(target, "file.txt")),
+      );
+
+      const redirectedInput = {
+        path: "alias/other.txt",
+        content: "content",
+      };
+      const redirectedEvent = {
+        type: "tool_call",
+        toolCallId: "call-2",
+        toolName: "write",
+        input: redirectedInput,
+      } as ToolCallEvent;
+      assert.deepEqual(await handler(redirectedEvent, ctx), {
+        block: true,
+        reason:
+          `Mikoto Policy denied this tool call. See ${
+            fileURLToPath(
+              new URL("../PERMISSION.md", import.meta.url),
+            )
+          }.`,
+      });
+      assert.equal(redirectedInput.path, "alias/other.txt");
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
   });
 
-  it("writes warnings to stderr without UI and ignores unrelated tools", async () => {
-    const cwd = await mkdtemp(
-      path.join(os.tmpdir(), "mikoto-policy-native-"),
-    );
-    const globalConfigPath = path.join(cwd, "global.json");
-    await writeFile(globalConfigPath, "{");
-    const handler = registerHandler(
-      { filesystem: { allowWrite: ["."] } },
-      globalConfigPath,
-    );
+  it("ignores unrelated tools", async () => {
+    const cwd = "/mikoto-policy-native-test/project";
+    const handler = registerHandler({});
     const ctx = {
       cwd,
       hasUI: false,
       isProjectTrusted: () => true,
     } as ExtensionContext;
-    const warnings: string[] = [];
-    const originalConsoleError = console.error;
-    console.error = (warning: string) => {
-      warnings.push(warning);
-    };
 
-    try {
-      assert.equal(
-        await handler(
-          {
-            type: "tool_call",
-            toolCallId: "call-1",
-            toolName: "bash",
-            input: { command: "pwd" },
-          } as ToolCallEvent,
-          ctx,
-        ),
-        undefined,
-      );
-      assert.deepEqual(warnings, []);
-
-      assert.equal(
-        await handler(
-          {
-            type: "tool_call",
-            toolCallId: "call-2",
-            toolName: "read",
-            input: { path: "file.txt" },
-          } as ToolCallEvent,
-          ctx,
-        ),
-        undefined,
-      );
-      assert.equal(warnings.length, 1);
-      assert.match(warnings[0], /ignored invalid policy/);
-    } finally {
-      console.error = originalConsoleError;
-      await rm(cwd, { recursive: true, force: true });
-    }
+    assert.equal(
+      await handler(
+        {
+          type: "tool_call",
+          toolCallId: "call-1",
+          toolName: "bash",
+          input: { command: "pwd" },
+        } as ToolCallEvent,
+        ctx,
+      ),
+      undefined,
+    );
   });
 });
