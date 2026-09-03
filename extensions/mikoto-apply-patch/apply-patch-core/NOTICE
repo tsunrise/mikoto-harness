@@ -1,0 +1,8 @@
+Mikoto Apply Patch Core
+
+This crate contains code adapted from the apply-patch crate in OpenAI Codex:
+https://github.com/openai/codex
+
+Codex is Copyright 2025 OpenAI and is licensed under the Apache License,
+Version 2.0. The adapted implementation has been modified for synchronous
+local preflight and commit, canonical-path policy handoff, and NAPI-RS use.
