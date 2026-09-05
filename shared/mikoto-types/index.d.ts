@@ -10,8 +10,9 @@ export type MikotoSoundEvent = {
 /**
  * Structured-cloneable effective Mikoto filesystem policy.
  *
- * Paths are normalized absolute paths. This document contains data only;
- * evaluation methods are exposed by the policy service that owns it.
+ * Paths are normalized absolute canonical paths resolved and pinned when the
+ * policy is loaded. This document contains data only; evaluation methods are
+ * exposed by the policy service that owns it.
  */
 export type MikotoPolicyDocument = {
   readonly filesystem: {
@@ -28,32 +29,42 @@ export type MikotoPolicyDecision =
     }
   | {
       readonly allowed: false;
+      /** Canonical path responsible for the denial. */
       readonly deniedPath: string;
     };
 
 export type MikotoPolicy = {
+  /** Returns the immutable canonical policy document. */
   document(): MikotoPolicyDocument;
   readonly permissionMdPath: string;
   /**
-   * Converts a possibly relative Pi tool path to the absolute lexical path
-   * accepted by the evaluation methods.
+   * Converts a possibly relative Pi tool path to an absolute lexical path
+   * accepted by canonicalizePath().
    *
    * Relative paths are resolved against the policy's session working
    * directory.
    */
   resolveToolPath(path: string): string;
   /**
-   * @param path **Absolute** lexical path (could contain symlink).
+   * Resolves symlinks in an absolute lexical path and appends missing suffixes
+   * to their deepest canonical ancestor.
    */
-  evaluateRead(path: string): Promise<MikotoPolicyDecision>;
+  canonicalizePath(lexicalPath: string): Promise<string>;
   /**
-   * @param path **Absolute** lexical path (could contain symlink).
+   * Evaluates without inspecting the filesystem or checking for symlinks.
+   * @param path Normalized absolute canonical path.
    */
-  evaluateReadTree(path: string): Promise<MikotoPolicyDecision>;
+  evaluateRead(canonicalPath: string): Promise<MikotoPolicyDecision>;
   /**
-   * @param path **Absolute** lexical path (could contain symlink).
+   * Evaluates without inspecting the filesystem or checking for symlinks.
+   * @param path Normalized absolute canonical path.
    */
-  evaluateWrite(path: string): Promise<MikotoPolicyDecision>;
+  evaluateReadTree(canonicalPath: string): Promise<MikotoPolicyDecision>;
+  /**
+   * Evaluates without inspecting the filesystem or checking for symlinks.
+   * @param path Normalized absolute canonical path.
+   */
+  evaluateWrite(canonicalPath: string): Promise<MikotoPolicyDecision>;
 };
 
 export type MikotoPolicyGetPolicyEvent = {

@@ -83,8 +83,8 @@ fn build_pi_display_diff(old_content: &str, new_content: &str) -> DisplayDiff {
             &mut output,
             ' ',
             line_change
-              .old_index()
-              .expect("an unchanged line has an old line number")
+              .new_index()
+              .expect("an unchanged line has a new line number")
               + 1,
             line_number_width,
             line_change.value(),
@@ -238,7 +238,7 @@ mod tests {
   }
 
   #[test]
-  fn renders_context_line_numbers_and_ellipsis_like_pi() {
+  fn renders_context_line_numbers_and_aligned_ellipsis() {
     let old = (1..=12)
       .map(|line| format!("line {line}\n"))
       .collect::<String>();
@@ -267,6 +267,18 @@ mod tests {
         " 10 line 10\n",
         "    ...",
       )
+    );
+  }
+
+  #[test]
+  fn uses_updated_file_line_numbers_for_context() {
+    assert_eq!(
+      build_pi_display_diff("alpha\nbeta\ngamma\n", "inserted\nalpha\nbeta\ngamma\n",).text,
+      concat!("+1 inserted\n", " 2 alpha\n", " 3 beta\n", " 4 gamma",),
+    );
+    assert_eq!(
+      build_pi_display_diff("removed\nalpha\nbeta\ngamma\n", "alpha\nbeta\ngamma\n",).text,
+      concat!("-1 removed\n", " 1 alpha\n", " 2 beta\n", " 3 gamma",),
     );
   }
 
