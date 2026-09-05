@@ -24,8 +24,9 @@
   non-transactional for operating-system failures and must report the
   committed prefix.
 - Honor cancellation before commit, never during commit.
-- Keep Rust patch and diff sizes uncapped. Bound only model-facing summaries,
-  call previews, and TUI rendering.
+- Keep Rust patch and diff sizes uncapped. Bound call previews and TUI
+  rendering, but preserve Codex's exact, newline-terminated model-facing
+  outcome summary.
 - Render `ApplyPatchChange.diff` directly with Pi's exported `renderDiff()`.
   It is Pi's numbered display format, not a machine-applicable patch. If a
   machine patch is added later, give it a separate field.
