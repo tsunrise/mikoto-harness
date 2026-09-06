@@ -62,6 +62,13 @@ In `package.json`, use
 We rely on a Pi event-bus for message passing between extensions inside this repo. Refer to `docs/inter-extensions.md`
 for more details.
 
+## Permission-aware Extensions
+
+When creating or changing an extension that evaluates permissions or requests
+user escalation, read and follow `docs/permission.md`. Keep generic event-bus
+conventions in `docs/inter-extensions.md`; permission-specific lifecycle,
+authorization, and escalation rules belong in `docs/permission.md`.
+
 ## Indentation
 
 Use 2 spaces as one level of code indentation.

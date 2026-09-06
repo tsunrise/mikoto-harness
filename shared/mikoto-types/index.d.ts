@@ -73,10 +73,45 @@ export type MikotoPolicyGetPolicyEvent = {
   ) => void | Promise<void>;
 };
 
+export type MikotoEscalationResult =
+  | { readonly decision: "approve" }
+  | {
+      readonly decision: "reject";
+      readonly cause:
+        | "user"
+        | "interrupted"
+        | "cancelled"
+        | "non_interactive"
+        | "unavailable"
+        | "busy"
+        | "shutdown"
+        | "error";
+      /** Present only when the user supplied a rejection reason. */
+      readonly reason?: string;
+    };
+
+/** Trusted in-process decision service, not an executor or reusable grant. */
+export type MikotoPolicyEscalateEvent = {
+  readonly requestId: string;
+  readonly source: string;
+  readonly verb: string;
+  readonly subject: string | readonly string[];
+  readonly why: string;
+  readonly signal: AbortSignal;
+  /**
+   * Reserve synchronously before any await. Only the first receiver in dispatch
+   * order wins; this is not agreement among multiple policies.
+   */
+  readonly claim: () => boolean;
+  /** The claimant completes once; it catches/logs callback throws/rejections. */
+  readonly callback: (result: MikotoEscalationResult) => void | Promise<void>;
+};
+
 /** Compile-time source of truth for Mikoto inter-extension event channels. */
 export type MikotoEventMap = {
 	readonly "mikoto-sound:sound": MikotoSoundEvent;
   readonly "mikoto-policy:get-policy": MikotoPolicyGetPolicyEvent;
+  readonly "mikoto-policy:escalate": MikotoPolicyEscalateEvent;
 };
 
 export type MikotoEventName = keyof MikotoEventMap;

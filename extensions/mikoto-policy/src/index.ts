@@ -5,16 +5,20 @@ import {
   MikotoPolicyConfig,
   MikotoPolicyDocumentLoader,
 } from "./config.ts";
-import { enforcePiNativeTools } from "./built-in-tools.ts";
+import { enforcePiBuiltInTools } from "./built-in-tools.ts";
 import { provideExtensionsApi } from "./extensions-api.ts";
 import { registerViewConfigCommand } from "./command.ts";
+import { installEscalation } from "./escalate/index.ts";
+import { installPolicyPrompt } from "./prompt.ts";
 
 export default async function mikotoPolicy(pi: ExtensionAPI): Promise<void> {
   const bundledConfig = MikotoPolicyConfig.parse(
     JSON.parse(await readFile(BUNDLED_POLICY_PATH, "utf8")),
   );
   const loader = new MikotoPolicyDocumentLoader(bundledConfig);
-  enforcePiNativeTools(loader, pi);
+  const broker = installEscalation(pi);
+  installPolicyPrompt(loader, pi);
+  enforcePiBuiltInTools(loader, broker, pi);
   provideExtensionsApi(loader, pi);
   registerViewConfigCommand(loader, pi);
 }

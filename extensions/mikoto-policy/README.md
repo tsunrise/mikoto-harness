@@ -1,7 +1,7 @@
 # Mikoto Policy
 
 Mikoto Policy is a Pi extension that enforces filesystem permissions for Pi's
-native file tools and exposes a policy API to dependent extensions in Mikoto
+built-in file tools and exposes a policy API to dependent extensions in Mikoto
 Harness.
 
 ## Configuration
@@ -23,7 +23,7 @@ The JSON Schema is available at
 
 ## Behavior
 
-Native tool calls to `read`, `grep`, `find`, `ls`, `write`, and `edit` are
+Built-in tool calls to `read`, `grep`, `find`, `ls`, `write`, and `edit` are
 enforced according to the configured policy. Filesystem authorization is split
 into three stages with separate responsibilities:
 
@@ -44,97 +44,25 @@ rule that cannot be resolved for another reason is dropped and reported as a
 warning during `session_start`. An allow rule that resolves outside its
 configured lexical tree is likewise dropped and reported.
 
-For Pi's native tools, Mikoto Policy currently bridges target determination to
-execution by replacing the lexical tool argument with the approved canonical
-path.
-
-Pi's built-in file tools still use ordinary pathname-based filesystem
-operations. A concurrent actor can therefore introduce a symlink into the
-pinned canonical path between target determination and tool execution.
-
 `bash` is not enforced in this extension and it should be enforced in other
 extensions.
 
+## Escalation
+
+Filesystem tools automatically escalate policy violations to the user. The
+system prompt exposes this boundary so the model can work within it and keep
+approval requests infrequent. See
+[PERMISSION.md](PERMISSION.md#one-time-exceptions) for details.
+
 ## Inter-extension API
 
-The `mikoto-policy:get-policy` event obtains the current session-scoped policy:
+Dependent extensions obtain the session policy through
+`mikoto-policy:get-policy` and request one-operation decisions through
+`mikoto-policy:escalate`. Load Policy first and use the same `mikoto-types`
+commit.
 
-```ts
-import type {
-  MikotoEventEmitter,
-  MikotoPolicy,
-} from "mikoto-types";
-
-let policy: MikotoPolicy | undefined;
-const events: MikotoEventEmitter = pi.events;
-
-pi.on("session_start", () => {
-  events.emit("mikoto-policy:get-policy", {
-    callback(currentPolicy) {
-      policy = currentPolicy;
-    },
-  });
-});
-```
-
-### Get the Policy Object
-
-- Users must place `mikoto-policy` before every dependent extension in Pi's
-  configured extension load order. `mikoto-policy` must be loaded first; merely
-  installing it is not sufficient.
-- Consumers must emit the request from their `session_start` handler
-  (recommended) or later, never from their extension factory. Pi awaits
-  `session_start` handlers in extension load order, so loading `mikoto-policy`
-  first ensures its policy object is initialized before a dependent extension
-  requests it.
-- The returned `MikotoPolicy` and its document are immutable session-scoped
-  snapshots of the loader's pinned canonical policy, not live-updating
-  objects. Request the policy during every `session_start` and cache it for
-  that session. Use `/reload` to resolve policy paths again.
-- Consumers must use `MikotoEventEmitter` from the same `mikoto-types` commit
-  as the policy extension. See
-  [`inter-extensions.md`](../../docs/inter-extensions.md).
-
-### Handle Symlinks During Filesystem Authorization
-
-Consumers must preserve the same target through all three authorization
-stages:
-
-1. **Target determination:** Resolve the tool input to a lexical path, then
-   resolve and pin its canonical path. `resolveToolPath()` provides an absolute
-   lexical path in the session context, while `canonicalizePath()` performs
-   lexical-to-canonical resolution. "Pinning" stores that current resolution
-   decision so tool execution or commit uses the canonical path selected in
-   this step instead of resolving the lexical path again. Treat either
-   preparation failure as denial.
-2. **Policy evaluation:** Pass only the pinned canonical path to
-   `evaluateRead()`, `evaluateReadTree()`, or `evaluateWrite()`. These methods
-   accept normalized absolute canonical paths, do not inspect the filesystem,
-   and do not resolve or verify symlinks.
-3. **Tool execution or commit:** If policy allows the operation, execute it
-   against the exact canonical path that was evaluated. Tool execution or
-   commit must ensure that the resolved canonical path is still canonical. A
-   robust implementation can use descriptor-relative no-follow traversal on
-   Unix or no-reparse handle opens on Windows; alternatively, it can check that
-   the path is still canonical immediately before applying the operation and
-   accept the small resulting TOCTOU risk.
-
-The basic flow is:
-
-```ts
-const lexicalPath = policy.resolveToolPath("./src/index.ts");
-const canonicalPath = await policy.canonicalizePath(lexicalPath);
-const decision = await policy.evaluateRead(canonicalPath);
-
-if (decision.allowed) {
-  // Execute against canonicalPath, never lexicalPath.
-}
-```
-
-A tool with its own planning layer may perform target determination itself and
-evaluate the canonical paths pinned by its plan. Its execution or commit stage
-must consume that same plan so it cannot return to the lexical paths after
-approval.
+See [Building permission-aware extensions](../../docs/permission.md) for the
+integration contract and examples.
 
 ## Development
 
@@ -143,3 +71,12 @@ From the Mikoto Harness root:
 ```bash
 npm run validate -w mikoto-policy
 ```
+
+The affected development baseline is Pi **0.85.1**. Tests cover real SDK
+integration and built-in interception as well as broker/UI races.
+For a no-operation real-TUI smoke test, explicitly load
+`test/fixtures/escalation-smoke.ts` after this extension and run
+`/escalation-smoke`. The same command rejects in print, JSON, and RPC modes.
+
+Core escalation lives in `src/escalate/{index,api,broker,ui}.ts`; built-in
+policy enforcement requests decisions directly from the broker.
