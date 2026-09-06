@@ -152,14 +152,17 @@ describe("escalation UI", () => {
     const render = (data: unknown, expanded: boolean) =>
       renderer!({ data } as never, { expanded } as never, historyTheme)!.render(60).join("\n");
     assert.match(render({ version: 99 }, false), /invalid decision record/);
-    const data = { version: 1, source: "test", requestId: "1", verb: "Write",
+    const data = { version: 1, source: "test", requestId: "1", verb: "Apply Patch",
       subject: ["/a", "/b\x1b[31m"], why: "Needed", result: { decision: "approve" } };
-    assert.match(render(data, false), /^Permission approved · /);
-    assert.match(render(data, true), /\/b\\u\{1b\}/);
-    assert.ok(!render(data, true).includes("\x1b"));
+    assert.equal(render(data, false), "⛩️  Approved by User: Apply Patch");
+    assert.equal(render(data, true), "⛩️  Approved by User: Apply Patch");
+    assert.ok(!render(data, true).includes("/a"));
     const rejected = { ...data, result: { decision: "reject", cause: "user", reason: "Keep it private" } };
-    assert.match(render(rejected, false), /Permission rejected: user/);
-    assert.match(render(rejected, true), /Reason: Keep it private/);
-    assert.deepEqual(new Set(colors), new Set(["muted"]));
+    assert.equal(render(rejected, false), "Rejected by User: Apply Patch");
+    assert.ok(!render(rejected, true).includes("Keep it private"));
+    const unavailable = { ...data, result: { decision: "reject", cause: "unavailable" } };
+    assert.equal(render(unavailable, false),
+      "Rejected due to issues: Apply Patch\nThe approval service was unavailable.");
+    assert.deepEqual(new Set(colors), new Set(["customMessageLabel", "muted"]));
   });
 });

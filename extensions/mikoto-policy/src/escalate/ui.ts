@@ -279,27 +279,42 @@ const decisionSchema = z.object({
 }).strict();
 
 export function registerDecisionRenderer(pi: ExtensionAPI): void {
-  pi.registerEntryRenderer(DECISION_ENTRY, (entry, { expanded }, theme) => {
+  pi.registerEntryRenderer(DECISION_ENTRY, (entry, _options, theme) => {
     const parsed = decisionSchema.safeParse(entry.data);
     if (!parsed.success) return new Text("Mikoto Policy: invalid decision record", 0, 0);
     const data = parsed.data;
-    const scope = subjects(data);
-    const label = data.result.decision === "approve" ? "Permission approved" : `Permission rejected: ${data.result.cause}`;
-    const summary = `${label} · ${display(scope[0] ?? "")}${scope.length > 1 ? ` (+${scope.length - 1})` : ""}`;
-    // A custom Component keeps the compact row genuinely compact and expanded
-    // scope fully wrapped. No caller text goes through Markdown or ANSI parsing.
+    const verb = display(data.verb);
     return {
       render(width) {
         if (width <= 0) return [];
-        const lines = expanded ? [
-          label, `${display(data.source)} · ${display(data.requestId)}`,
-          `${display(data.verb)}:`, ...scope.map(display), `Why: ${display(data.why)}`,
-          ...(data.result.decision === "reject" && data.result.reason
-            ? [`Reason: ${display(data.result.reason)}`] : []),
-        ].flatMap((line) => wrapScope(line, width)) : [summary];
-        return lines.map((line) => theme.fg("muted", truncateToWidth(line, width)));
+        if (data.result.decision === "approve") {
+          return wrapScope(`⛩️  Approved by User: ${verb}`, width)
+            .map((line) => theme.fg("customMessageLabel", truncateToWidth(line, width)));
+        }
+        const lines = data.result.cause === "user"
+          ? [`Rejected by User: ${verb}`]
+          : [
+              `Rejected due to issues: ${verb}`,
+              rejectionIssue(data.result.cause),
+            ];
+        return lines.flatMap((line) => wrapScope(line, width))
+          .map((line) => theme.fg("muted", truncateToWidth(line, width)));
       },
       invalidate() {},
     };
   });
+}
+
+function rejectionIssue(
+  cause: Exclude<Extract<MikotoEscalationResult, { decision: "reject" }>["cause"], "user">,
+): string {
+  return {
+    interrupted: "Approval was interrupted.",
+    cancelled: "The operation was cancelled.",
+    non_interactive: "Interactive approval was unavailable.",
+    unavailable: "The approval service was unavailable.",
+    busy: "The approval queue was full.",
+    shutdown: "The session was shutting down.",
+    error: "An internal escalation error occurred.",
+  }[cause];
 }
