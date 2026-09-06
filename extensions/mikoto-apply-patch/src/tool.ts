@@ -33,7 +33,7 @@ export function createApplyPatchTool(
     constrainedSampling: applyPatchConstrainedSampling,
     executionMode: "sequential",
 
-    async execute(_toolCallId, params, signal, _onUpdate, ctx) {
+    async execute(toolCallId, params, signal, _onUpdate, ctx) {
       if (!supportsApplyPatch(ctx.model)) {
         throw new Error(
           "apply_patch is unavailable because this model cannot receive it as a raw grammar tool.",
@@ -42,7 +42,9 @@ export function createApplyPatchTool(
       if (signal?.aborted) throw new Error("Operation aborted");
 
       const prepared = preparePatch(ctx.cwd, params.patch);
-      await policy.assertCanWrite(prepared.targets);
+      const assertCurrent = await policy.assertCanWrite(prepared.targets, toolCallId, signal);
+      if (assertCurrent) assertCurrent();
+      if (signal?.aborted) throw new Error("Operation aborted");
       const outcome = await applyPatch(prepared, signal);
 
       return {

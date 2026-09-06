@@ -56,6 +56,7 @@ function policyHarness(
     },
     events: {
       emit(name: string, data: unknown) {
+        if (name === "mikoto-policy:escalate") return;
         assert.equal(name, "mikoto-policy:get-policy");
         const request = data as MikotoPolicyGetPolicyEvent;
         for (const policy of providers) request.callback(policy);
@@ -134,7 +135,7 @@ describe("Mikoto Policy integration", () => {
 });
 
 describe("active tool replacement", () => {
-  it("restores exactly the native tools that were previously active", async () => {
+  it("restores exactly the built-in tools that were previously active", async () => {
     const handlers = new Map<string, Handler[]>();
     let active = ["read", "write", "edit", "bash"];
     const pi = {
@@ -173,7 +174,7 @@ describe("active tool replacement", () => {
     assert.deepEqual(active, ["read", "write", "edit", "bash"]);
   });
 
-  it("does not restore a native tool that was initially inactive", async () => {
+  it("does not restore a built-in tool that was initially inactive", async () => {
     const handlers = new Map<string, Handler[]>();
     let active = ["read", "edit", "bash"];
     const pi = {

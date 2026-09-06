@@ -8,7 +8,7 @@
   model-visible contract.
 - Gate activation on both a known raw-grammar Pi adapter and
   `compat.supportsOpenAIGrammarTools === true`. Preserve and restore the exact
-  native `edit` and `write` activation state when models change.
+  built-in `edit` and `write` activation state when models change.
 - Parse once with `preparePatch()`. Treat `PreparedPatch` as opaque and
   single-use: read only its policy targets, then pass that same object to
   `applyPatch()`.

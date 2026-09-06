@@ -34,7 +34,11 @@ export function installApplyPatchToolState(pi: ExtensionAPI): void {
       return;
     }
 
-    const next = active.filter((name) => name !== APPLY_PATCH);
+    restore();
+  }
+
+  function restore(): void {
+    const next = pi.getActiveTools().filter((name) => name !== APPLY_PATCH);
     const toolsToRestore = Object.entries(replacedTools ?? {})
       .map(([name, index]) => ({
         name: name as ReplacedTool,
@@ -55,5 +59,12 @@ export function installApplyPatchToolState(pi: ExtensionAPI): void {
   });
   pi.on("model_select", (_event, ctx) => {
     synchronize(ctx);
+  });
+  pi.on("session_shutdown", (event) => {
+    // Reload creates a fresh tracker. Restore the hidden activation set while
+    // this runtime still owns it, so the new tracker snapshots the real built-in
+    // choices rather than mistaking Patch's temporary suppression for a user
+    // disabling edit/write.
+    if (event.reason === "reload") restore();
   });
 }

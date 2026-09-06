@@ -8,10 +8,10 @@ When the selected model supports OpenAI grammar tools, the extension:
 
 - exposes `apply_patch` as a raw custom/freeform tool rather than a JSON
   function tool;
-- temporarily replaces Pi's native `edit` and `write` tools;
+- temporarily replaces Pi's built-in `edit` and `write` tools;
 
 Switching to an incompatible model removes `apply_patch` and restores the
-native tools that were active before the replacement.
+built-in tools that were active before the replacement.
 
 The currently supported Pi API adapters are:
 
@@ -32,11 +32,14 @@ before this extension to enable it.
 When enabled, `mikoto-apply-patch` respects the policy's filesystem write
 rules:
 
-- every file being added, modified, or deleted must be allowed by
-  `allowWrite` and not blocked by `denyWrite`;
+- every file being added, modified, or deleted is checked against
+  `allowWrite` and `denyWrite`;
 - a move checks both its source and destination; and
-- if any path is denied or cannot be evaluated, the whole patch is rejected
-  without changing files.
+- a denied path automatically requests one approval for the entire patch. If
+  approval is rejected or unavailable, or a path cannot be evaluated, the
+  whole patch is rejected without changing files.
+
+Escalation adds no fields or directives to the raw patch grammar.
 
 Symlink paths are checked against the location they actually point to. A
 symlink inside an allowed workspace therefore cannot grant access to a target
