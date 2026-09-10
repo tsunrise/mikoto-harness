@@ -23,6 +23,9 @@ export function registerViewConfigCommand(
         "",
         "Resolved policy:",
         JSON.stringify(loaded.document, null, 2),
+        "",
+        "Load diagnostics:",
+        JSON.stringify(loaded.diagnostics, null, 2),
       ];
       if (loaded.warnings.length > 0) {
         output.push(

@@ -166,8 +166,11 @@ dialog.
 
 The broker records informational session entries. Never inspect restored
 history as authorization. Persisted entries, public tool arguments, config,
-JSON, network input, and executor IPC remain untrusted boundaries and require
-runtime validation. The Mikoto event payload itself follows the trusted,
+JSON, and network input remain untrusted boundaries and require runtime
+validation. Garden's private executor IPC couples two trusted components of one
+package; shared contracts, bounds, operation identity, and lifecycle checks
+catch mismatched builds and stale messages rather than authenticating an
+untrusted peer. The Mikoto event payload itself follows the trusted,
 same-commit convention from [inter-extensions.md](inter-extensions.md).
 
 ## Model guidance
@@ -176,6 +179,13 @@ Keep global permission guidance generic so it remains correct as extensions
 are added. A tool that requires explicit escalation must describe that trigger
 in its own public schema or tool instructions. Do not advertise unsupported
 arguments on other tools.
+
+Policy's Permissions block owns the effective filesystem **and network**
+snapshot, with network enforcement explicitly scoped to sandboxed Garden
+commands. Garden's short execution block refers to that section rather than
+duplicating policy JSON; capability workflows belong in bundled, on-demand
+skills. Describe the live capability endpoint exception symbolically, never
+by injecting its address or bearer token.
 
 Escalation interrupts the user. Encourage the model to work within current
 permissions and request exceptions infrequently, without suggesting a bypass
@@ -195,6 +205,12 @@ Test the behavior owned by the consumer:
 - immutable operation inputs and canonical-target changes while waiting;
 - every non-TUI mode; and
 - execution of the same prepared operation only after authorization.
+
+Garden additionally requires `policy.diagnostics()` and rejects invalid or
+unreadable selected layers and failed canonical rules, even when native file
+evaluation retains its existing fallback snapshot. Optional absence and
+untrusted-workspace skipping are benign. Its network document remains pinned;
+the ephemeral capability endpoint exception belongs to Garden, not Policy.
 
 Run TypeScript checks for the consumer, `mikoto-policy`, and `mikoto-types`.
 For UI or lifecycle changes, also perform a real Pi TUI smoke test.

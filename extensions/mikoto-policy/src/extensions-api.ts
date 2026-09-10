@@ -3,6 +3,7 @@ import type {
   MikotoEventPayload,
   MikotoPolicy,
   MikotoPolicyDocument,
+  MikotoPolicyLoadDiagnostic,
 } from "mikoto-types";
 import {
   PERMISSION_PATH,
@@ -36,7 +37,7 @@ export function provideExtensionsApi(
         console.error(warning);
       }
     }
-    policy = createPolicy(loaded.document, ctx.cwd);
+    policy = createPolicy(loaded.document, ctx.cwd, loaded.diagnostics);
   });
 
   const eventName = "mikoto-policy:get-policy";
@@ -59,9 +60,11 @@ export function provideExtensionsApi(
 function createPolicy(
   document: MikotoPolicyDocument,
   cwd: string,
+  diagnostics: readonly MikotoPolicyLoadDiagnostic[],
 ): MikotoPolicy {
   return Object.freeze({
     document: () => document,
+    diagnostics: () => diagnostics,
     permissionMdPath: PERMISSION_PATH,
     resolveToolPath: (path: string) => resolveToolPath(path, cwd),
     canonicalizePath: async (lexicalPath: string) =>

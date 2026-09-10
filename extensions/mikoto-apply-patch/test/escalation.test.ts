@@ -17,7 +17,7 @@ const request = (signal = new AbortController().signal) => ({
 function harness(evaluateWrite?: MikotoPolicy["evaluateWrite"]) {
   const bus = new EventEmitter();
   const handlers = new Map<string, () => void>();
-  const events: MikotoEventEmitter = { emit(name, data) { bus.emit(name, data); } };
+  const events: MikotoEventEmitter = { emit(name: string, data: unknown) { bus.emit(name, data); } };
   const pi = {
     events,
     on(name: string, handler: () => void) { handlers.set(name, handler); },

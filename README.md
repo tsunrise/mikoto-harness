@@ -31,8 +31,3 @@ npm run validate
 - Every extension in the repo guarantees no conflict with the other extensions
   in this repo.
 - No extensions guarantee compatibility with extensions outside this repo.
-
-## Disclosure on LLM use
-
-Code is heavily assisted with LLM but I know what I am doing and have spent human time. 
-Check git history for proof.

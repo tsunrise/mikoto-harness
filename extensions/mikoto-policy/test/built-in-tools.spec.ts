@@ -243,16 +243,20 @@ describe("enforcePiBuiltInTools", () => {
       const decision = new Promise<MikotoEscalationResult>((resolve) => {
         approve = resolve;
       });
+      let enteredApproval!: () => void;
+      const approvalEntered = new Promise<void>((resolve) => { enteredApproval = resolve; });
       const { handler } = registerHandler(
         { filesystem: { denyRead: ["denied"] } },
         {
           globalConfigPath: path.join(cwd, "missing-global.json"),
-          request: async () => decision,
+          request: async () => { enteredApproval(); return decision; },
         },
       );
       const input = { path: "denied/file" };
       const pending = call(handler, context(cwd), "read", input);
-      await new Promise<void>((resolve) => setImmediate(resolve));
+      // Wait for the actual authorization boundary, not one event-loop tick:
+      // policy file loading can take longer on a busy filesystem.
+      await approvalEntered;
       await rename(denied, path.join(cwd, "old-denied"));
       await symlink(allowed, denied);
       approve({ decision: "approve" });

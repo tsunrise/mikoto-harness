@@ -1,4 +1,4 @@
-import type { MikotoPolicyDocument } from "mikoto-types";
+import type { MikotoPolicyDocument, MikotoPolicyLoadDiagnostic } from "mikoto-types";
 import { getCanonicalPath } from "./canonical-path.ts";
 import { isSameOrDescendant } from "./path-comparison.ts";
 
@@ -12,21 +12,28 @@ export function resolvePolicyFileSystemCanonicalPaths(
 ): {
   readonly document: MikotoPolicyDocument;
   readonly warnings: readonly string[];
+  readonly diagnostics: readonly MikotoPolicyLoadDiagnostic[];
 } {
   const warnings = new Set<string>();
+  const diagnostics: MikotoPolicyLoadDiagnostic[] = [];
   const filesystem = policy.filesystem;
   const document = Object.freeze({
+    network: Object.freeze({
+      allowedDomains: Object.freeze([...policy.network.allowedDomains]),
+      deniedDomains: Object.freeze([...policy.network.deniedDomains]),
+    }),
     filesystem: Object.freeze({
-      denyRead: resolveRules(filesystem.denyRead, false, warnings),
-      allowRead: resolveRules(filesystem.allowRead, true, warnings),
-      allowWrite: resolveRules(filesystem.allowWrite, true, warnings),
-      denyWrite: resolveRules(filesystem.denyWrite, false, warnings),
+      denyRead: resolveRules(filesystem.denyRead, false, warnings, diagnostics, "denyRead"),
+      allowRead: resolveRules(filesystem.allowRead, true, warnings, diagnostics, "allowRead"),
+      allowWrite: resolveRules(filesystem.allowWrite, true, warnings, diagnostics, "allowWrite"),
+      denyWrite: resolveRules(filesystem.denyWrite, false, warnings, diagnostics, "denyWrite"),
     }),
   });
 
   return Object.freeze({
     document,
     warnings: Object.freeze([...warnings]),
+    diagnostics: Object.freeze(diagnostics),
   });
 }
 
@@ -34,6 +41,8 @@ function resolveRules(
   lexicalPaths: readonly string[],
   validateAllowBoundary: boolean,
   warnings: Set<string>,
+  diagnostics: MikotoPolicyLoadDiagnostic[],
+  rule: keyof MikotoPolicyDocument["filesystem"],
 ): readonly string[] {
   const canonicalPaths = new Set<string>();
 
@@ -45,11 +54,13 @@ function resolveRules(
         !isValidAllowRulePath(lexicalPath, canonicalPath)
       ) {
         warnings.add(lexicalPath);
+        diagnostics.push(Object.freeze({ kind: "canonical_rule", rule, path: lexicalPath }));
         continue;
       }
       canonicalPaths.add(canonicalPath);
     } catch {
       warnings.add(lexicalPath);
+      diagnostics.push(Object.freeze({ kind: "canonical_rule", rule, path: lexicalPath }));
     }
   }
 

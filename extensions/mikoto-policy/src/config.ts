@@ -6,7 +6,7 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
-import type { MikotoPolicyDocument } from "mikoto-types";
+import type { MikotoPolicyDocument, MikotoPolicyLoadDiagnostic } from "mikoto-types";
 import { z } from "zod";
 import { resolvePolicyFileSystemCanonicalPaths } from "./resolve-policy-paths.ts";
 
@@ -74,6 +74,43 @@ const FilesystemConfig = z
   .describe("Filesystem policy. Read is allowed in default, and follow deny-and-allow pattern. Write is denied by default, and follow allow-and-deny pattern.");
 type FilesystemConfig = z.infer<typeof FilesystemConfig>;
 
+/** Keep this syntax aligned with the declaration-only Policy contract. */
+export function normalizeNetworkRule(value: string, deny: boolean): string | undefined {
+  if (!value || value !== value.trim() || value.length > 260) return undefined;
+  const parts = value.toLowerCase().split(":");
+  if (parts.length > 2) return undefined;
+  const [host, port] = parts;
+  if (port !== undefined && (!/^[1-9]\d{0,4}$/.test(port) || Number(port) > 65535)) return undefined;
+  if (host === "*") return deny ? value.toLowerCase() : undefined;
+  const dns = host.startsWith("*.") ? host.slice(2) : host;
+  if (/^[\d.]+$/.test(dns)) {
+    if (host !== dns || !/^(0|[1-9]\d{0,2})(\.(0|[1-9]\d{0,2})){3}$/.test(dns) ||
+      dns.split(".").some((part) => Number(part) > 255)) return undefined;
+  } else {
+    if (dns.length > 253 || !dns.split(".").every((label) =>
+      /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label))) return undefined;
+    // Numeric final labels have ambiguous inet_aton/URL interpretations.
+    if (/^\d+$/.test(dns.split(".").at(-1)!)) return undefined;
+    try { if (new URL(`http://${dns}`).hostname !== dns) return undefined; }
+    catch { return undefined; }
+  }
+  return value.toLowerCase();
+}
+
+function networkArray(deny: boolean) {
+  const rule = z.string().refine((value) => normalizeNetworkRule(value, deny) !== undefined,
+    "Expected a DNS/IPv4 destination with optional port; wildcard-all is deny-only.")
+    .overwrite((value) => normalizeNetworkRule(value, deny)!);
+  const array = z.array(rule);
+  return z.union([array, z.strictObject({ "+": array, "-": array }),
+    z.strictObject({ "+": array }), z.strictObject({ "-": array })]);
+}
+
+const NetworkConfig = z.strictObject({
+  allowedDomains: networkArray(false).optional(),
+  deniedDomains: networkArray(true).optional(),
+});
+
 export const MikotoPolicyConfig = z
   .strictObject({
     $schema: z
@@ -81,6 +118,7 @@ export const MikotoPolicyConfig = z
       .optional()
       .describe("Optional JSON Schema URI."),
     filesystem: FilesystemConfig.optional(),
+    network: NetworkConfig.optional(),
   })
   .meta({
     title: "Mikoto Policy",
@@ -93,6 +131,7 @@ export type MikotoPolicyConfig = z.infer<typeof MikotoPolicyConfig>;
 export type MikotoPolicyLoadResult = {
   readonly document: MikotoPolicyDocument;
   readonly warnings: readonly string[];
+  readonly diagnostics: readonly MikotoPolicyLoadDiagnostic[];
 };
 
 export class MikotoPolicyDocumentLoader {
@@ -112,6 +151,7 @@ export class MikotoPolicyDocumentLoader {
     valid: false
     path: string
     warnings: readonly string[]
+    diagnostic: MikotoPolicyLoadDiagnostic
   }
   private readonly loadedPolicies = new Map<string, {
     readonly workspaceConfigPath: string;
@@ -125,7 +165,7 @@ export class MikotoPolicyDocumentLoader {
       "mikoto-policy.json",
     ),
   ) {
-    this.bundledConfig = bundledConfig;
+    this.bundledConfig = MikotoPolicyConfig.parse(bundledConfig);
     this.globalConfigPath = globalConfigPath;
   }
 
@@ -160,18 +200,23 @@ export class MikotoPolicyDocumentLoader {
               warnings: Object.freeze([
                 invalidPolicyWarning(this.globalConfigPath, error),
               ]),
+              diagnostic: layerDiagnostic(this.globalConfigPath, error),
             };
       }
     }
 
     const layers = [this.bundledConfig];
     const warnings: string[] = [];
+    const diagnostics: MikotoPolicyLoadDiagnostic[] = [];
     if (this.globalConfigState.valid) {
       if (this.globalConfigState.config) {
         layers.push(this.globalConfigState.config);
+      } else {
+        diagnostics.push({ kind: "optional_absence", path: this.globalConfigPath });
       }
     } else {
       warnings.push(...this.globalConfigState.warnings);
+      diagnostics.push(this.globalConfigState.diagnostic);
     }
     const workspaceConfigPath = path.join(
       normalizedCwd,
@@ -190,9 +235,13 @@ export class MikotoPolicyDocumentLoader {
         } catch (error) {
           if (!isMissingFileError(error)) {
             warnings.push(invalidPolicyWarning(workspaceConfigPath, error));
+            diagnostics.push(layerDiagnostic(workspaceConfigPath, error));
+          } else {
+            diagnostics.push({ kind: "optional_absence", path: workspaceConfigPath });
           }
         }
       } else {
+        diagnostics.push({ kind: "untrusted_workspace", path: workspaceConfigPath });
         try {
           await access(workspaceConfigPath);
           warnings.push(
@@ -213,12 +262,13 @@ export class MikotoPolicyDocumentLoader {
       { cwd: normalizedCwd },
     );
     const resolvedPolicy = resolvePolicyFileSystemCanonicalPaths(
-      { filesystem: mergedFileSystemPaths },
+      { filesystem: mergedFileSystemPaths, network: mergeNetwork(layers) },
     );
     warnings.push(...resolvedPolicy.warnings);
     const result = Object.freeze({
       document: resolvedPolicy.document,
       warnings: Object.freeze(warnings),
+      diagnostics: Object.freeze([...diagnostics, ...resolvedPolicy.diagnostics].map((d) => Object.freeze(d))),
     });
     this.loadedPolicies.set(cacheKey, {
       workspaceConfigPath,
@@ -247,6 +297,24 @@ export class MikotoPolicyDocumentLoader {
       workspaceConfigPath: loadedPolicy.workspaceConfigPath,
     });
   }
+}
+
+function layerDiagnostic(configPath: string, error: unknown): MikotoPolicyLoadDiagnostic {
+  return { kind: (error as NodeJS.ErrnoException)?.code ? "unreadable_layer" : "invalid_layer", path: configPath };
+}
+
+function mergeNetwork(layers: readonly MikotoPolicyConfig[]): MikotoPolicyDocument["network"] {
+  const merged = { allowedDomains: [] as string[], deniedDomains: [] as string[] };
+  for (const layer of layers) {
+    for (const key of ["allowedDomains", "deniedDomains"] as const) {
+      const next = layer.network?.[key];
+      if (next !== undefined) merged[key] = mergePathArray(merged[key], next);
+    }
+  }
+  return Object.freeze({
+    allowedDomains: Object.freeze(merged.allowedDomains),
+    deniedDomains: Object.freeze(merged.deniedDomains),
+  });
 }
 
 function policyCacheKey(cwd: string, cwdTrusted: boolean): string {

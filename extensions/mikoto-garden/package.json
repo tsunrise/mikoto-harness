@@ -1,0 +1,38 @@
+{
+  "name": "mikoto-garden",
+  "version": "0.1.0",
+  "description": "Mikoto Garden: macOS sandboxed commands and authenticated host capabilities.",
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "check": "tsc --noEmit && node --check test/gate-1.mjs",
+    "test": "node --test test/*.spec.ts",
+    "test:gate-1": "node test/gate-1.mjs",
+    "validate": "npm run build && npm run check && npm test",
+    "prepack": "npm run build"
+  },
+  "dependencies": {
+    "@anthropic-ai/sandbox-runtime": "0.0.75",
+    "zod": "^4.0.0"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-tui": "*",
+    "typebox": "*"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "0.85.1",
+    "@earendil-works/pi-ai": "0.85.1",
+    "@earendil-works/pi-tui": "0.85.1",
+    "@types/node": "^24.0.0",
+    "mikoto-types": "^0.1.0",
+    "typescript": "^5.9.0"
+  },
+  "files": ["index.ts", "src", "dist", "skills", "README.md", "VALIDATION.md", "examples"],
+  "pi": { "extensions": ["./index.ts"], "skills": ["./skills"] },
+  "engines": {
+    "node": ">=26"
+  }
+}

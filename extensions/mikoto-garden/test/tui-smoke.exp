@@ -1,0 +1,108 @@
+#!/usr/bin/expect -f
+# Explicit, no-model real-TUI fixture. All approved commands are `true`.
+set timeout 25
+set testDir [lindex $argv 0]
+set repo [lindex $argv 1]
+set theme [lindex $argv 2]
+if {$theme eq ""} { set theme dark }
+proc tap {data} {
+  global spawn_id
+  # Drain redraws before the next key. Otherwise a full PTY output buffer can
+  # stall Pi while several Esc/command inputs accumulate into one input batch.
+  expect -timeout 1 {
+    -re {.+} { exp_continue -continue_timer }
+    timeout {}
+  }
+  send -- $data
+}
+expect_after {
+  timeout { puts "FAIL: TUI transition timed out"; exit 1 }
+}
+log_user 0
+# Do not retain terminal frames: this fixture deliberately opens credentials.
+# In particular, avoid closing/reopening Expect's log channel around an active
+# PTY (the system Tcl/Expect can recycle a live channel descriptor).
+spawn env PI_CODING_AGENT_DIR=$testDir TMPDIR=$testDir TERM=xterm-256color \
+  pi --no-session --no-extensions --no-skills --no-context-files \
+  --no-prompt-templates --no-themes --offline --no-approve --use-theme $theme \
+  -e "$repo/extensions/mikoto-policy/index.ts" \
+  -e "$repo/extensions/mikoto-garden/test/pi-fixture.ts" \
+  -e "$repo/extensions/mikoto-terminal-notify"
+after 2000
+tap "/garden-smoke\r"
+expect "GARDEN_CAPABILITY_OK"
+expect {
+  "GARDEN_SMOKE_OK" {}
+  timeout { puts "FAIL $theme: command/capability smoke timed out"; exit 1 }
+  eof { puts "FAIL $theme: Pi exited before smoke"; exit 1 }
+}
+tap "/ps\r"
+expect "GARDEN_VIEW_OPEN"
+tap "\033"
+expect "GARDEN_VIEW_CLOSED"
+after 100
+tap "/garden-picker-smoke\r"
+expect "GARDEN_PICKER_READY"
+tap "/ps\r"
+expect "GARDEN_VIEW_OPEN"
+# The live pipe reader keeps its observed preview; finished/collected jobs do not.
+tap "\r"
+expect "PICKER_PREVIEW"
+tap "\033"
+tap "\033"
+expect "GARDEN_VIEW_CLOSED"
+after 100
+# Debug intentionally shows the full live credential. Check its shape only;
+# no terminal transcript is retained, including dismissal redraws.
+tap "/ps:debug\r"
+expect {
+  -re {[A-Za-z0-9_-]{43}} {}
+  timeout {
+    puts "FAIL $theme: debug token view missing"; exit 1
+  }
+}
+tap "\033"
+expect "GARDEN_VIEW_CLOSED"
+after 100
+tap "/ps\r"
+expect "GARDEN_VIEW_OPEN"
+tap "\033"
+expect "GARDEN_VIEW_CLOSED"
+after 100
+tap "/ps\r"
+expect "GARDEN_VIEW_OPEN"
+tap "d"
+tap "\r"
+tap "\033"
+tap "\033"
+expect "GARDEN_VIEW_CLOSED"
+tap "/garden-picker-smoke check\r"
+expect "GARDEN_PICKER_STOPPED"
+after 100
+tap "/garden-escalation-smoke\r"
+expect {
+  "GARDEN_ESCALATION_REQUESTED" {}
+  timeout { puts "FAIL $theme: approval request missing"; exit 1 }
+}
+tap "\033\[D"
+after 100
+tap "\r"
+expect {
+  "GARDEN_ESCALATION_APPROVED" {}
+  timeout { puts "FAIL $theme: approved launch result missing"; exit 1 }
+}
+tap "/garden-escalation-smoke\r"
+expect "GARDEN_ESCALATION_REQUESTED"
+tap "\r"
+after 150
+tap "\r"
+expect {
+  "GARDEN_ESCALATION_REJECTED" {}
+  timeout { puts "FAIL $theme: rejection result missing"; exit 1 }
+}
+tap "\004"
+expect {
+  eof {}
+  timeout { puts "FAIL $theme: shutdown timed out"; exit 1 }
+}
+puts stderr "PASS real Pi TUI $theme: commands, HTTP notification, ps/debug, approve/reject, shutdown"

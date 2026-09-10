@@ -51,6 +51,10 @@ it("chains policy and escalation guidance once, unchanged across modes and activ
       allowWrite: ["z-output", "a-output"],
       denyWrite: ["z-output/locked", "a-output/locked"],
     },
+    network: {
+      allowedDomains: ["z.example", "a.example"],
+      deniedDomains: ["z.blocked.example", "a.blocked.example"],
+    },
   };
   const loader = new MikotoPolicyDocumentLoader(config, globalConfigPath);
   const h = capturePrompt(loader);
@@ -58,15 +62,28 @@ it("chains policy and escalation guidance once, unchanged across modes and activ
   const previous = "Chained previous instructions.\n\n## Permissions\nExisting provider guidance.";
   const result = (await h.render({ systemPrompt: previous }, ctx))!;
   assert.ok(result.systemPrompt.startsWith(`${previous}\n\n`));
+  const permissions = result.systemPrompt.slice(result.systemPrompt.lastIndexOf("## Permissions"));
+  const jsonIndex = permissions.indexOf("```json");
+  const filesystemIndex = permissions.indexOf("Filesystem:");
+  const networkIndex = permissions.indexOf("Network:");
+  const escalationIndex = permissions.indexOf("### Escalation");
+  assert.ok(jsonIndex >= 0 && jsonIndex < filesystemIndex);
+  assert.ok(filesystemIndex < networkIndex && networkIndex < escalationIndex);
   assert.match(result.systemPrompt, /Reads are allowed by default/);
   assert.match(result.systemPrompt, /allowRead wins ties/);
-  assert.match(result.systemPrompt, /denyWrite rule overrides all allowWrite/);
+  assert.match(result.systemPrompt, /Writes require allowWrite, and denyWrite always wins/);
+  assert.match(result.systemPrompt, /Access is denied by default/);
+  assert.match(result.systemPrompt, /allowedDomains grants matching destinations unless deniedDomains matches/);
+  assert.match(result.systemPrompt, /exact live capability endpoint is the only automatic localhost exception/);
+  assert.doesNotMatch(permissions.slice(0, filesystemIndex), /Filesystem|Network|Effective policy/);
   const escalation = result.systemPrompt.slice(
     result.systemPrompt.indexOf("### Escalation"),
   );
-  assert.match(escalation, /Filesystem tools automatically ask the user for approval/);
+  assert.match(escalation, /Each escalation requires manual user action/);
+  assert.match(escalation, /repeated requests are disruptive/);
   assert.match(escalation, /Keep escalation infrequent by working within the policy/);
-  assert.doesNotMatch(escalation, /sandbox|apply_patch|read\/write|edit\/grep/);
+  assert.match(escalation, /without an explicit escalation parameter automatically escalate policy violations/);
+  assert.doesNotMatch(escalation, /Filesystem tools|sandbox|apply_patch|read\/write|edit\/grep/);
   assert.equal(await h.render(result, ctx), undefined);
 
   const { document } = await loader.load(cwd, true);
@@ -74,6 +91,9 @@ it("chains policy and escalation guidance once, unchanged across modes and activ
   const rendered = snapshot(result);
   for (const key of ["denyRead", "allowRead", "allowWrite", "denyWrite"] as const) {
     assert.deepEqual(rendered.filesystem[key], [...document.filesystem[key]].sort());
+  }
+  for (const key of ["allowedDomains", "deniedDomains"] as const) {
+    assert.deepEqual(rendered.network[key], [...document.network[key]].sort());
   }
   // Unusual path characters must remain JSON data, not new prompt lines.
   assert.ok(!result.systemPrompt.includes('line\n"break'));
@@ -92,6 +112,9 @@ it("chains policy and escalation guidance once, unchanged across modes and activ
     filesystem: Object.fromEntries(
       Object.entries(config.filesystem).map(([key, paths]) => [key, [...paths].reverse()]),
     ),
+    network: Object.fromEntries(
+      Object.entries(config.network).map(([key, domains]) => [key, [...domains].reverse()]),
+    ),
   }, globalConfigPath);
   assert.deepEqual(await capturePrompt(reordered).render({ systemPrompt: previous }, ctx), result);
 });
@@ -106,12 +129,14 @@ it("shows merged, trust-scoped effective rules and keeps them pinned until reloa
       allowWrite: ["global-output"],
       denyWrite: ["global-output/locked"],
     },
+    network: { allowedDomains: ["global.example"], deniedDomains: ["blocked.example"] },
   }));
   await writeFile(workspaceConfigPath, JSON.stringify({
     filesystem: {
       denyRead: { "+": ["workspace-secret"] },
       allowWrite: ["workspace-output"],
     },
+    network: { allowedDomains: ["workspace.example"] },
   }));
   const createLoader = () => new MikotoPolicyDocumentLoader({
     filesystem: { allowWrite: ["bundled-output"] },
@@ -126,6 +151,7 @@ it("shows merged, trust-scoped effective rules and keeps them pinned until reloa
       allowWrite: [join(canonicalCwd, "workspace-output")],
       denyWrite: [join(canonicalCwd, "global-output/locked")],
     },
+    network: { allowedDomains: ["workspace.example"], deniedDomains: ["blocked.example"] },
   };
   assert.deepEqual(snapshot(trusted), expected);
   const untrusted = await h.render(event, { ...ctx, isProjectTrusted: () => false });
@@ -135,13 +161,16 @@ it("shows merged, trust-scoped effective rules and keeps them pinned until reloa
       denyRead: [join(canonicalCwd, "global-secret")],
       allowWrite: [join(canonicalCwd, "global-output")],
     },
+    network: { allowedDomains: ["global.example"], deniedDomains: ["blocked.example"] },
   });
 
   await writeFile(workspaceConfigPath, JSON.stringify({
     filesystem: { allowWrite: ["new-output"] },
+    network: { allowedDomains: ["new.example"] },
   }));
   assert.deepEqual(await h.render(event, ctx), trusted);
   const reloaded = await capturePrompt(createLoader()).render(event, ctx);
   assert.deepEqual(snapshot(reloaded).filesystem.allowWrite, [join(canonicalCwd, "new-output")]);
+  assert.deepEqual(snapshot(reloaded).network, { allowedDomains: ["new.example"], deniedDomains: ["blocked.example"] });
   assert.notDeepEqual(reloaded, trusted);
 });

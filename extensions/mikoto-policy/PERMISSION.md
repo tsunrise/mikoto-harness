@@ -89,7 +89,33 @@ repeated approvals. An `allowWrite` addition cannot defeat a matching
 `denyWrite`: deliberately review the applicable deny rules too, rather than
 silently appending a broader allow.
 
-The current schema is filesystem-only and does not apply to bash. 
+## Network
+
+The strict schema also accepts:
+
+```json
+{
+  "network": {
+    "allowedDomains": ["api.example.com:443", "*.example.org"],
+    "deniedDomains": ["private.example.org"]
+  }
+}
+```
+
+Both arrays default to empty and support replacement and `+`/`-` deltas.
+Entries are normalized to lowercase before deltas. Supported destinations
+are ASCII DNS/punycode names, `*.example.com` (subdomains, not the apex), and
+canonical dotted-decimal IPv4. Each may have a decimal `:port` from 1–65535.
+Only denies accept `*` and `*:port`. URLs, paths, userinfo, CIDR, IPv6,
+noncanonical numeric addresses, and other globs are rejected.
+
+Network access requires an explicit matching allow. A matching deny takes
+precedence over every allow, and unmatched destinations remain denied. Network
+decisions do not open an approval dialog.
+
+`policy.diagnostics()` distinguishes invalid/unreadable selected layers and
+dropped canonical rules from optional absence or an untrusted workspace.
+Editing policy still requires separate user authorization and `/reload`.
 
 Policy schema is located at `mikoto-policy.schema.json` in the same directory as this markdown file. Only
 read it if you attempt to update policy.

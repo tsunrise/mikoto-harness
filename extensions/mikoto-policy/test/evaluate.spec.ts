@@ -26,6 +26,7 @@ function createPolicy(
   filesystem: Partial<MikotoPolicyDocument["filesystem"]> = {},
 ): MikotoPolicyDocument {
   return {
+    network: { allowedDomains: [], deniedDomains: [] },
     filesystem: {
       denyRead: [],
       allowRead: [],

@@ -1,0 +1,4 @@
+/dist/
+/gate-run-*/
+/test-runtime/
+/*.tgz

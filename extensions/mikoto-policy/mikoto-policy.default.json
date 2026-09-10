@@ -1,5 +1,9 @@
 {
   "$schema": "./mikoto-policy.schema.json",
+  "network": {
+    "allowedDomains": [],
+    "deniedDomains": []
+  },
   "filesystem": {
     "denyRead": [],
     "allowRead": [],

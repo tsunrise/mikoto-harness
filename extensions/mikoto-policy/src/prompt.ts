@@ -2,19 +2,15 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { MikotoPolicyDocument } from "mikoto-types";
 import type { MikotoPolicyDocumentLoader } from "./config.ts";
 
-const POLICY_RULES = `## Permissions
+const POLICY_HEADING = "## Permissions";
 
-Filesystem tools enforce the effective policy below. Paths are literal absolute canonical paths, not globs; rules cover each path and its descendants after resolving symlinks.
+const POLICY_GUIDANCE = `Filesystem: Reads are allowed by default; the most specific allowRead or denyRead match wins, and allowRead wins ties. Writes require allowWrite, and denyWrite always wins.
 
-- Reads are allowed by default. The most specific matching allowRead or denyRead rule wins; allowRead wins ties.
-- Writes require a matching allowWrite rule. Any matching denyWrite rule overrides all allowWrite rules.
-- Directory searches/listings also fail if their subtree includes a denied read.
-
-Effective filesystem policy (path data):`;
+Network: Access is denied by default; allowedDomains grants matching destinations unless deniedDomains matches. Garden's exact live capability endpoint is the only automatic localhost exception.`;
 
 const ESCALATION_GUIDANCE = `### Escalation
 
-Filesystem tools automatically ask the user for approval when an operation violates the effective filesystem policy. Keep escalation infrequent by working within the policy whenever possible.`;
+Each escalation requires manual user action, so repeated requests are disruptive. Keep escalation infrequent by working within the policy whenever possible. Tools without an explicit escalation parameter automatically escalate policy violations.`;
 
 export function installPolicyPrompt(
   loader: MikotoPolicyDocumentLoader,
@@ -41,6 +37,10 @@ function renderPolicyPrompt(document: MikotoPolicyDocument): string {
       allowWrite: [...document.filesystem.allowWrite].sort(),
       denyWrite: [...document.filesystem.denyWrite].sort(),
     },
+    network: {
+      allowedDomains: [...document.network.allowedDomains].sort(),
+      deniedDomains: [...document.network.deniedDomains].sort(),
+    },
   }, null, 2);
-  return `${POLICY_RULES}\n\n\`\`\`json\n${snapshot}\n\`\`\`\n\n${ESCALATION_GUIDANCE}`;
+  return `${POLICY_HEADING}\n\n\`\`\`json\n${snapshot}\n\`\`\`\n\n${POLICY_GUIDANCE}\n\n${ESCALATION_GUIDANCE}`;
 }

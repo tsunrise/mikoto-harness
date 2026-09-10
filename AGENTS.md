@@ -10,7 +10,6 @@ differentiate them from similar packages outside the repo.
   subdirectory.
 - All shared libraries live in the `shared` directory, with one package per
   subdirectory.
-- All skills live in the `skills` directory.
 
 The root `package.json` uses npm workspaces `extensions/*` and `shared/*`.
 Install dependencies from the repository root. Keep package-local scripts so a

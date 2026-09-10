@@ -188,3 +188,31 @@ when the contract changes. Third-party extensions must use that same commit.
   boundaries such as config parsing.
 - If callbacks are supported, test absent receivers, repeated listeners,
   callback failures, and async behavior where applicable.
+
+## Garden capability bindings
+
+`mikoto-garden:bind` is a schema-carrying trusted event. Emit from `session_start`
+or later, with a live Zod 4 `bodySchema` and async handler. Do not validate the
+event envelope with Zod. The schema and handler remain paired live references;
+Garden applies the schema exactly once to authenticated, bounded HTTP data and
+passes its successful parsed output to the handler. Async refinements/defaults/
+transforms are supported; schemas should be bounded and side-effect-free.
+
+The emitter has a dedicated generic overload: handler body inference comes
+from `bodySchema`, not an annotation on the handler. Producers need Zod 4 as a
+runtime dependency, but `mikoto-types` stays declaration-only.
+
+POST defaults to JSON and requires `application/json` (optionally UTF-8);
+`bodyFormat: "text"` explicitly selects raw UTF-8. GET accepts no body and
+passes `undefined` to its schema. Routing is exact, without query APIs.
+The first binding for an exact method/path pair wins. `POST /update` is
+conventionally owned by `mikoto-terminal-notify` when that extension is loaded.
+Acknowledgement disposal is idempotent and aborts in-flight requests
+cooperatively. Registration is not a claim that the optional capability
+listener started successfully.
+
+One healthy receiver acknowledges once. Producers must tolerate no receiver,
+bounded acknowledgement waits, duplicate callbacks, and callback failures.
+Every registered route is callable by every holder of the session token.
+Handlers have host authority: expose deliberate narrow operations, never a
+generic execution/forwarding proxy. Disposal and timeout are not rollback.

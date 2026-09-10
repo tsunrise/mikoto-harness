@@ -25,6 +25,7 @@ function policyWith(
 ): MikotoPolicy {
   return {
     document: () => ({
+      network: { allowedDomains: [], deniedDomains: [] },
       filesystem: {
         denyRead: [],
         allowRead: [],
@@ -32,6 +33,7 @@ function policyWith(
         denyWrite: [],
       },
     }),
+    diagnostics: () => [],
     permissionMdPath: "/policy/PERMISSION.md",
     resolveToolPath: (path) => path,
     canonicalizePath: async (path) => path,
