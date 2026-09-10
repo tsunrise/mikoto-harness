@@ -1,4 +1,8 @@
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type {
+  AgentToolUpdateCallback,
+  ExtensionAPI,
+  ExtensionContext,
+} from "@earendil-works/pi-coding-agent";
 import { StringEnum } from "@earendil-works/pi-ai";
 import { Type } from "typebox";
 import { z } from "zod";
@@ -6,7 +10,7 @@ import type { MikotoEventEmitter } from "mikoto-types";
 import type { Endpoint } from "./capability-server.ts";
 import { prepareLaunch, assertLaunchIdentity } from "./launch.ts";
 import { authorize, inputSubject, launchSubject } from "./permissions.ts";
-import { JOB_LIMITS, type Delivery, type InputOperation } from "./protocol.ts";
+import { JOB_LIMITS, type Delivery, type InputOperation, type Requests } from "./protocol.ts";
 import type { ExecutorClient } from "./executor-client.ts";
 import { boundedText } from "./executor/output-store.ts";
 import { gardenRenderers } from "./ui.ts";
@@ -162,14 +166,56 @@ export function registerGardenTools(
   current: () => ToolRuntime,
   collected: (id: number) => void = () => {},
 ): void {
-  const noteCollected = (result: Delivery, runtime: ToolRuntime) => {
-    if (result.yielded || runtime.lifetime.signal.aborted) return;
+  async function deliver<Name extends "spawn" | "input">(
+    runtime: ToolRuntime,
+    method: Name,
+    data: Requests[Name],
+    signal: AbortSignal,
+    approved: boolean,
+    update: AgentToolUpdateCallback | undefined,
+  ) {
+    const result = await runtime.client.request(
+      method,
+      data,
+      data.wait + (method === "spawn" ? 20000 : 15000),
+      signal,
+      approved,
+      (progress) =>
+        update?.({
+          content: [{ type: "text", text: progress.output }],
+          details: progress,
+        }),
+    );
     try {
-      collected(result.job.id);
-    } catch {
-      /* Presentation cannot undo a committed delivery. */
+      // Initial cancellation must stop an undisclosed command. Later input
+      // handoffs, however, are accepted once the response arrives; cancellation
+      // cannot undo delivered input or retroactively cancel that handoff.
+      if (method === "spawn") signal.throwIfAborted();
+      const response = formatResult({ ...result, capabilities: !!runtime.endpoint() });
+      // Ack means accepted for tool return, not proof of model receipt.
+      await runtime.client.request("ack", {
+        id: result.job.id,
+        chunk: result.chunk,
+        preserveLog: response.details.omitted > 0 || response.details.logCapped,
+      });
+      if (!result.yielded && !runtime.lifetime.signal.aborted) {
+        try {
+          collected(result.job.id);
+        } catch {
+          /* Presentation cannot undo a committed delivery. */
+        }
+      }
+      return response;
+    } catch (error) {
+      if (result.request !== undefined) {
+        await runtime.client.request("cancel", { request: result.request }).catch(() => {});
+      }
+      if (method === "spawn" && !result.job.disclosed) {
+        await runtime.client.request("stop", { id: result.job.id }).catch(() => {});
+      }
+      throw error;
     }
-  };
+  }
   const events: MikotoEventEmitter = pi.events;
   pi.registerTool({
     name: "exec_command",
@@ -259,42 +305,18 @@ export function registerGardenTools(
         MIN_POLL_WAIT_MS,
         MAX_EXEC_WAIT_MS,
       );
-      const result = await runtime.client.request(
+      return deliver(
+        runtime,
         "spawn",
         {
           launch,
           wait,
           tokens: input.max_output_tokens ?? 10000,
         },
-        wait + 20000,
         signal,
         launch.mode === "unsandboxed",
-        (progress) =>
-          update?.({
-            content: [{ type: "text", text: progress.output }],
-            details: progress,
-          }),
+        update,
       );
-      try {
-        signal.throwIfAborted();
-        const response = formatResult({ ...result, capabilities: !!runtime.endpoint() });
-        // Ack means accepted for tool return, not proof of model receipt.
-        await runtime.client.request("ack", {
-          id: result.job.id,
-          chunk: result.chunk,
-          preserveLog: response.details.omitted > 0 || response.details.logCapped,
-        });
-        noteCollected(result, runtime);
-        return response;
-      } catch (error) {
-        if (result.request !== undefined) {
-          await runtime.client.request("cancel", { request: result.request }).catch(() => {});
-        }
-        if (!result.job.disclosed) {
-          await runtime.client.request("stop", { id: result.job.id }).catch(() => {});
-        }
-        throw error;
-      }
     },
   });
   pi.registerTool({
@@ -374,7 +396,8 @@ export function registerGardenTools(
       const wait = mutation
         ? clamp(input.yield_time_ms, MIN_INPUT_WAIT_MS, MIN_INPUT_WAIT_MS, MAX_INPUT_WAIT_MS)
         : clamp(input.yield_time_ms, MIN_POLL_WAIT_MS, MIN_POLL_WAIT_MS, MAX_POLL_WAIT_MS);
-      const result = await runtime.client.request(
+      return deliver(
+        runtime,
         "input",
         {
           id: job.id,
@@ -382,32 +405,10 @@ export function registerGardenTools(
           wait,
           tokens: input.max_output_tokens ?? 10000,
         },
-        wait + 15000,
         signal,
         elevated,
-        (progress) =>
-          update?.({
-            content: [{ type: "text", text: progress.output }],
-            details: progress,
-          }),
+        update,
       );
-      // Once a response is accepted, don't retroactively cancel the handoff.
-      // Cancellation while still waiting uses executor cancel and leaves output.
-      try {
-        const response = formatResult({ ...result, capabilities: !!runtime.endpoint() });
-        await runtime.client.request("ack", {
-          id: job.id,
-          chunk: result.chunk,
-          preserveLog: response.details.omitted > 0 || response.details.logCapped,
-        });
-        noteCollected(result, runtime);
-        return response;
-      } catch (error) {
-        if (result.request !== undefined) {
-          await runtime.client.request("cancel", { request: result.request }).catch(() => {});
-        }
-        throw error;
-      }
     },
   });
 }

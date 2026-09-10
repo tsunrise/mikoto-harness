@@ -37,14 +37,18 @@ class CommandRow {
   partial = true;
   fallback = "";
   theme: Theme;
+  private cached: { width: number; lines: string[] } | undefined;
   constructor(theme: Theme) {
     this.theme = theme;
   }
   invalidate(): void {
-    /* Styles are recomputed from the injected theme in render(). */
+    this.cached = undefined;
   }
   render(width: number): string[] {
     if (width <= 0) return [];
+    // Pi renders settled transcript rows again while other content streams.
+    // Reuse the whole row until its data, theme, expansion, or width changes.
+    if (this.cached?.width === width) return this.cached.lines;
     const padding = width >= 3 ? 1 : 0;
     const theme = this.theme;
     const data = this.details;
@@ -130,7 +134,9 @@ class CommandRow {
       if (!this.expanded && lines.length > 5) hints.push(keyHint("app.tools.expand", "to expand"));
       box.addChild(new Text(theme.fg("dim", hints.join(" · ")), 0, 0));
     }
-    return box.render(width).map((line) => truncateToWidth(line, width, ""));
+    const rendered = box.render(width).map((line) => truncateToWidth(line, width, ""));
+    this.cached = { width, lines: rendered };
+    return rendered;
   }
 }
 export function gardenRenderers(): Pick<
@@ -148,6 +154,7 @@ export function gardenRenderers(): Pick<
       row.theme = theme;
       row.error = context.isError;
       row.partial = context.isPartial;
+      row.invalidate();
       context.state.gardenRow = row;
       return row;
     },
@@ -166,6 +173,7 @@ export function gardenRenderers(): Pick<
           .join("\n"),
         50 * 1024,
       );
+      row.invalidate();
       return new Container();
     },
   };

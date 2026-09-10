@@ -21,8 +21,24 @@ const RETAINED_SIDE = OUTPUT_LIMITS.unread / 2;
 const isContinuation = (byte: number): boolean => (byte & 0xc0) === 0x80;
 
 export function sanitize(text: string): string {
-  return text
-    .replace(/\x1b\][^\x07]*(?:\x07|\x1b\\)/g, "")
+  // Scan OSC delimiters once. A regex that searches for a terminator from
+  // every ESC ] can stall the executor on a truncated, control-heavy log.
+  // Stop at the first terminator so OSC 8 hyperlinks keep their visible label.
+  const parts: string[] = [];
+  let start = -1;
+  let keptFrom = 0;
+  for (const match of text.matchAll(/\x1b\]|\x07|\x1b\\/g)) {
+    if (match[0] === "\x1b]") {
+      if (start < 0) start = match.index;
+    } else if (start >= 0) {
+      parts.push(text.slice(keptFrom, start));
+      keptFrom = match.index + match[0].length;
+      start = -1;
+    }
+  }
+  // Incomplete sequences remain ordinary text, with controls stripped below.
+  parts.push(text.slice(keptFrom));
+  return parts.join("")
     .replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "")
     .replace(/[\x00-\x08\x0b-\x1f\x7f-\x9f\u202a-\u202e\u2066-\u2069]/g, "");
 }

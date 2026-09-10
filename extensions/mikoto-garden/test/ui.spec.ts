@@ -52,3 +52,43 @@ test("tool renderers keep terminal-control sequences inert", async () => {
   assert.match(rendered, /tail/);
   assert.doesNotMatch(rendered, /\]52|evil/);
 });
+
+test("settled tool rows reuse rendering until their content or display inputs change", async () => {
+  initTheme("dark", false);
+  const theme = await builtInTheme("dark");
+  const renderers = gardenRenderers();
+  const args = { cmd: "first command" };
+  const context: ToolRenderContext = {
+    args, state: {}, executionStarted: true, argsComplete: true, isPartial: false,
+    expanded: false, showImages: false, isError: false, cwd: "/", toolCallId: "cache",
+    lastComponent: undefined, invalidate() { assert.fail("Recursive invalidation"); },
+  };
+  const row = renderers.renderCall!(args, theme, context);
+  const result = {
+    content: [{ type: "text" as const, text: "first output\n" + "body\n".repeat(100) + "tail" }],
+    details: undefined,
+  };
+  renderers.renderResult!(result, { expanded: false, isPartial: false }, theme, context);
+  const first = row.render(100);
+  assert.strictEqual(row.render(100), first, "old output must not be rewrapped on every frame");
+
+  // Pi may reuse its args object while streaming, so identity alone is not an
+  // invalidation signal. Each renderer callback must invalidate the row.
+  args.cmd = "changed command";
+  renderers.renderCall!(args, theme, context);
+  assert.match(row.render(100).join("\n"), /changed command/);
+  renderers.renderResult!(result, { expanded: true, isPartial: false }, theme, context);
+  const expanded = row.render(100);
+  assert.match(expanded.join("\n"), /first output/);
+  assert.notStrictEqual(row.render(40), expanded, "width changes must rewrap");
+  const narrow = row.render(40);
+  row.invalidate();
+  assert.notStrictEqual(row.render(40), narrow, "theme invalidation must rebuild styles");
+
+  result.content[0].text = "replacement output";
+  renderers.renderResult!(result, { expanded: false, isPartial: false }, theme, context);
+  const replacement = row.render(40);
+  assert.match(replacement.join("\n"), /replacement output/);
+  assert.doesNotMatch(replacement.join("\n"), /first output/);
+  assert.strictEqual(row.render(40), replacement);
+});

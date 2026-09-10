@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { ExtensionAPI, ExtensionContext, ToolDefinition } from "@earendil-works/pi-coding-agent";
+import type { AgentToolUpdateCallback, ExtensionAPI, ExtensionContext, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import type { Delivery, Job, Requests } from "../src/protocol.ts";
 import { registerGardenTools, type ToolRuntime } from "../src/tools.ts";
 
-function fixture() {
+function fixture(onRequest: (method: keyof Requests) => void = () => {}) {
   const tools = new Map<string, ToolDefinition>();
   const requests: { method: keyof Requests; data: unknown; timeout?: number }[] = [];
   const job: Job = {
@@ -15,7 +15,7 @@ function fixture() {
   const delivery: Delivery = {
     job: { ...job, state: "exited", exit_code: 0, stdinOpen: false },
     chunk: "fixture", output: "done", omitted: 0, log: "/fixture/log",
-    logCapped: false, wall_ms: 1, yielded: false, capabilities: false,
+    logCapped: false, wall_ms: 1, yielded: false, capabilities: false, request: 99,
   };
   const runtime: ToolRuntime = {
     generation: "fixture", lifetime: new AbortController(),
@@ -23,9 +23,10 @@ function fixture() {
     client: {
       async request(method: keyof Requests, data: unknown, timeout?: number) {
         requests.push({ method, data, timeout });
+        onRequest(method);
         if (method === "list") return { jobs: [job] };
         if (method === "spawn" || method === "input") return delivery;
-        if (method === "preflight" || method === "ack") return null;
+        if (method === "preflight" || method === "ack" || method === "cancel" || method === "stop") return null;
         assert.fail(`Unexpected request: ${method}`);
       },
     } as unknown as ToolRuntime["client"],
@@ -38,12 +39,15 @@ function fixture() {
     cwd: process.cwd(), thinkingLevel: "off",
     sessionManager: { getSessionId: () => "fixture", getSessionFile: () => undefined },
   } as unknown as ExtensionContext;
-  registerGardenTools(pi, () => runtime);
+  const collected: number[] = [];
+  registerGardenTools(pi, () => runtime, (id) => collected.push(id));
   return {
     tools,
     requests,
-    execute: (name: string, args: Record<string, unknown>) =>
-      tools.get(name)!.execute("fixture", args, undefined, undefined, ctx),
+    delivery,
+    collected,
+    execute: (name: string, args: Record<string, unknown>, signal?: AbortSignal, update?: AgentToolUpdateCallback) =>
+      tools.get(name)!.execute("fixture", args, signal, update, ctx),
   };
 }
 
@@ -137,5 +141,45 @@ test("invalid waits are rejected before dispatch, not repaired by clamping", asy
       await assert.rejects(h.execute(name, { ...args, yield_time_ms }), /Invalid tool arguments/);
       assert.deepEqual(h.requests, []);
     }
+  }
+});
+
+test("initial cancellation stops an undisclosed job; an arrived input handoff is still accepted", async () => {
+  for (const name of ["exec_command", "write_stdin"]) {
+    const controller = new AbortController();
+    const h = fixture((method) => {
+      if (method === "spawn" || method === "input") controller.abort();
+    });
+    h.delivery.job.disclosed = name !== "exec_command";
+    const result = h.execute(name, name === "exec_command" ? { cmd: "true" } : { session_id: 123 }, controller.signal);
+    if (name === "exec_command") {
+      await assert.rejects(result, /abort/i);
+      assert.deepEqual(h.requests.slice(-2).map(({ method }) => method), ["cancel", "stop"]);
+      assert.deepEqual(h.collected, []);
+    } else {
+      await result;
+      assert.equal(h.requests.at(-1)!.method, "ack");
+      assert.deepEqual(h.collected, [123]);
+    }
+  }
+});
+
+test("both tools release failed handoffs and ACK log retention before reporting collection", async () => {
+  for (const name of ["exec_command", "write_stdin"]) {
+    const args = name === "exec_command" ? { cmd: "true" } : { session_id: 123 };
+    const failed = fixture((method) => {
+      if (method === "ack") throw new Error("ACK failed");
+    });
+    failed.delivery.job.disclosed = name !== "exec_command";
+    await assert.rejects(failed.execute(name, args), /ACK failed/);
+    assert.deepEqual(failed.requests.find(({ method }) => method === "cancel")?.data, { request: 99 });
+    assert.equal(failed.requests.some(({ method }) => method === "stop"), name === "exec_command");
+    assert.deepEqual(failed.collected, []);
+
+    const accepted = fixture();
+    accepted.delivery.omitted = 10;
+    await accepted.execute(name, args);
+    assert.deepEqual(accepted.requests.at(-1)?.data, { id: 123, chunk: "fixture", preserveLog: true });
+    assert.deepEqual(accepted.collected, [123]);
   }
 });
