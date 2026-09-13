@@ -1,8 +1,9 @@
 # Mikoto Harness
 
-This is a mono-repo of multiple Pi extensions, shared libraries, and skills.
-All extension and shared-library packages have brand name "Mikoto" to
-differentiate them from similar packages outside the repo.
+This is a mono-repo of multiple Pi extensions and shared libraries. Some
+extensions bundle related Pi skills. All extension and shared-library packages
+have brand name "Mikoto" to differentiate them from similar packages outside
+the repo.
 
 ## Repo Tree Structure
 
@@ -10,6 +11,8 @@ differentiate them from similar packages outside the repo.
   subdirectory.
 - All shared libraries live in the `shared` directory, with one package per
   subdirectory.
+- Skills tied to an extension live in that extension's `skills` directory. Do
+  not create a top-level `skills` directory.
 
 The root `package.json` uses npm workspaces `extensions/*` and `shared/*`.
 Install dependencies from the repository root. Keep package-local scripts so a
@@ -71,3 +74,22 @@ authorization, and escalation rules belong in `docs/permission.md`.
 ## Indentation
 
 Use 2 spaces as one level of code indentation.
+
+## Testing
+
+Test code behavior, not the presence or absence of text in source files,
+prompts, documentation, or manifests. Do not add source-text searches,
+wording checklists, or assertions that merely repeat static file contents,
+including through a function that returns that content.
+
+Invoke the code and assert observable behavior: state transitions, validation,
+serialization, escaping, side effects, rendering, and runtime loading or
+packaging. UI tests must not assert exact authored wording in labels, titles,
+hints, descriptions, or notifications. Copy edits should not break tests.
+Instead, verify selection and cancellation, focus, visibility, layout bounds,
+styling, state-dependent rendering, and emitted actions. Do not move expected
+copy into fixtures just to hide the coupling.
+
+Text assertions are appropriate for behavioral contracts such as caller-supplied
+data being displayed or omitted, terminal escaping, serialized protocol fields,
+and bytes written by a tool—not for checking authored prose.

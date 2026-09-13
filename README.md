@@ -1,17 +1,21 @@
 # Mikoto Harness: An opinionated agent setup for Pi
 
-This repository contains extensions and skills for
+This repository contains extension packages and shared libraries for
 [Pi Coding Agent](https://pi.dev/) that serve as building blocks for my
-personal agent system *Mikoto*.
+personal agent system *Mikoto*. Some extension packages bundle Pi skills.
 
 ## Repository layout
 
-- `extensions/*` contains independently installable Pi extension packages.
+- `extensions/*` contains independently installable Pi extension packages,
+  including any skills bundled with those extensions.
 - `shared/*` contains declaration-only or runtime libraries shared by
   extensions.
-- `skills/*` contains Pi skills.
 
 The root is a private npm workspace.
+
+`extensions/mikoto-plan/` provides `/plan` and `/lgtm` for conversational
+planning with a Markdown deliverable. Load it alongside `mikoto-question`;
+see its README for command semantics and advisory research/cleanup rules.
 
 ```bash
 npm install
