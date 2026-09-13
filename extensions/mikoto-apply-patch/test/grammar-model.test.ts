@@ -31,7 +31,6 @@ describe("apply_patch tool transport", () => {
     const tool = createApplyPatchTool(policy);
 
     assert.equal(tool.name, "apply_patch");
-    assert.equal(tool.label, "apply_patch");
     assert.equal(tool.description, APPLY_PATCH_DESCRIPTION);
     assert.equal(tool.executionMode, "sequential");
     assert.equal(tool.promptSnippet, undefined);

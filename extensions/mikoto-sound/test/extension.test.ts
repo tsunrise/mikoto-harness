@@ -195,7 +195,12 @@ describe("Mikoto Sound extension", () => {
 					},
 				},
 			);
-			assert.match(rendered?.render(100).join("\n") ?? "", /Mikoto Sound warning/);
+			assert.ok(rendered);
+			// Wrapping and indentation may split a diagnostic across UI rows.
+			const output = rendered.render(100).join("\n").replace(/\s+/g, "");
+			for (const message of warning.messages) {
+				assert.ok(output.includes(message.replace(/\s+/g, "")));
+			}
 		} finally {
 			await rm(directory, { recursive: true, force: true });
 		}

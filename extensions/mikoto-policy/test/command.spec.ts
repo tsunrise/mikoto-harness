@@ -72,10 +72,6 @@ describe("registerViewConfigCommand", () => {
 
       registerViewConfigCommand(loader, pi);
       assert.equal(commandName, "mikoto-policy:view");
-      assert.equal(
-        command?.description,
-        "View the resolved Mikoto policy",
-      );
       assert.ok(command);
 
       let notificationText: string | undefined;

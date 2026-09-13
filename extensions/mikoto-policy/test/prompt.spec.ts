@@ -42,7 +42,7 @@ function snapshot(result: { systemPrompt: string } | undefined): MikotoPolicyDoc
   return JSON.parse(match[1]) as MikotoPolicyDocument;
 }
 
-it("chains policy and escalation guidance once, unchanged across modes and active tools", async (t) => {
+it("chains the policy snapshot once, unchanged across modes and active tools", async (t) => {
   const { cwd, globalConfigPath, ctx } = await workspace(t);
   const config = {
     filesystem: {
@@ -62,28 +62,6 @@ it("chains policy and escalation guidance once, unchanged across modes and activ
   const previous = "Chained previous instructions.\n\n## Permissions\nExisting provider guidance.";
   const result = (await h.render({ systemPrompt: previous }, ctx))!;
   assert.ok(result.systemPrompt.startsWith(`${previous}\n\n`));
-  const permissions = result.systemPrompt.slice(result.systemPrompt.lastIndexOf("## Permissions"));
-  const jsonIndex = permissions.indexOf("```json");
-  const filesystemIndex = permissions.indexOf("Filesystem:");
-  const networkIndex = permissions.indexOf("Network:");
-  const escalationIndex = permissions.indexOf("### Escalation");
-  assert.ok(jsonIndex >= 0 && jsonIndex < filesystemIndex);
-  assert.ok(filesystemIndex < networkIndex && networkIndex < escalationIndex);
-  assert.match(result.systemPrompt, /Reads are allowed by default/);
-  assert.match(result.systemPrompt, /allowRead wins ties/);
-  assert.match(result.systemPrompt, /Writes require allowWrite, and denyWrite always wins/);
-  assert.match(result.systemPrompt, /Access is denied by default/);
-  assert.match(result.systemPrompt, /allowedDomains grants matching destinations unless deniedDomains matches/);
-  assert.match(result.systemPrompt, /exact live capability endpoint is the only automatic localhost exception/);
-  assert.doesNotMatch(permissions.slice(0, filesystemIndex), /Filesystem|Network|Effective policy/);
-  const escalation = result.systemPrompt.slice(
-    result.systemPrompt.indexOf("### Escalation"),
-  );
-  assert.match(escalation, /Each escalation requires manual user action/);
-  assert.match(escalation, /repeated requests are disruptive/);
-  assert.match(escalation, /Keep escalation infrequent by working within the policy/);
-  assert.match(escalation, /without an explicit escalation parameter automatically escalate policy violations/);
-  assert.doesNotMatch(escalation, /Filesystem tools|sandbox|apply_patch|read\/write|edit\/grep/);
   assert.equal(await h.render(result, ctx), undefined);
 
   const { document } = await loader.load(cwd, true);

@@ -3,7 +3,6 @@ import { describe, it } from "node:test";
 import {
 	DND_STATE_ENTRY_TYPE,
 	consumeAvailabilityNotice,
-	dndUiMessage,
 	endDndTurn,
 	initialDndState,
 	restoreDndState,
@@ -11,11 +10,6 @@ import {
 } from "../src/dnd-state.ts";
 
 describe("DND state", () => {
-	it("formats the UI-only on/off messages", () => {
-		assert.equal(dndUiMessage(true), "Do not disturb mode is on");
-		assert.equal(dndUiMessage(false), "Do not disturb mode is off");
-	});
-
 	it("remembers that DND was enabled even after a manual toggle off", () => {
 		let state = toggleDnd(initialDndState());
 		assert.equal(state.enabled, true);

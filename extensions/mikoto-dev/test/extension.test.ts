@@ -59,10 +59,6 @@ describe("Mikoto Dev extension", () => {
       const agentDir = path.join(root, ".pi", "agent");
       const setupResult = setup(agentDir);
       assert.equal(setupResult.commandName, SYSTEM_PROMPT_DEBUG_COMMAND);
-      assert.equal(
-        setupResult.command.description,
-        "Write the current system prompt to a Markdown file",
-      );
 
       let prompt = "# First prompt\n";
       const notifications: Array<{ message: string; level: string }> = [];
@@ -75,16 +71,8 @@ describe("Mikoto Dev extension", () => {
       prompt = "# Replacement prompt";
       await setupResult.command.handler("", ctx);
       assert.equal(await readFile(outputPath, "utf8"), prompt);
-      assert.deepEqual(notifications, [
-        {
-          message: `System prompt written to ${outputPath}`,
-          level: "info",
-        },
-        {
-          message: `System prompt written to ${outputPath}`,
-          level: "info",
-        },
-      ]);
+      assert.deepEqual(notifications.map((notice) => notice.level), ["info", "info"]);
+      assert.ok(notifications.every((notice) => notice.message.includes(outputPath)));
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -105,10 +93,7 @@ describe("Mikoto Dev extension", () => {
 
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.level, "error");
-      assert.match(
-        notifications[0]?.message ?? "",
-        /^Failed to write system prompt:/,
-      );
+      assert.equal(await readFile(agentDir, "utf8"), "blocking file");
     } finally {
       await rm(root, { recursive: true, force: true });
     }

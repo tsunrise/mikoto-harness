@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { before, describe, it } from "node:test";
 import {
   initTheme,
+  renderDiff,
   type Theme,
 } from "@earendil-works/pi-coding-agent";
 import { stripTerminalSequences } from "@earendil-works/pi-tui";
@@ -56,10 +57,19 @@ describe("apply_patch rendering", () => {
     );
     const output = plain(component);
 
-    assert.match(output, /^apply_patch$/m);
-    assert.match(output, /^A safe-.*\.ts \+1$/m);
-    assert.match(output, /^M old\.ts -> new\.ts \+1 -1$/m);
-    assert.match(output, /^D obsolete\.ts$/m);
+    for (const file of ["safe-.ts", "old.ts", "new.ts", "obsolete.ts"]) {
+      assert.ok(output.includes(file));
+    }
+    const rows = component.render(1_000);
+    assert.ok(rows[0]?.includes(theme.getFgAnsi("toolTitle")));
+    for (const [file, color] of [
+      ["safe-.ts", "toolDiffAdded"],
+      ["old.ts", "warning"],
+      ["obsolete.ts", "toolDiffRemoved"],
+    ] as const) {
+      const row = rows.find((line) => stripTerminalSequences(line).includes(file));
+      assert.ok(row?.includes(theme.getFgAnsi(color)));
+    }
     assert.doesNotMatch(output, /secret body/);
     assert.doesNotMatch(output, /\x1b/);
   });
@@ -92,10 +102,14 @@ describe("apply_patch rendering", () => {
     );
     const output = plain(component);
 
-    assert.match(output, /M src\/old\.ts -> src\/new\.ts \+1 -1/);
-    assert.match(output, /-2 old value/);
-    assert.match(output, /\+2 new value/);
-    assert.match(output, /D obsolete\.ts -1/);
+    for (const change of outcome.changes) {
+      assert.ok(output.includes(change.path));
+      if (change.movePath) assert.ok(output.includes(change.movePath));
+      const diff = stripTerminalSequences(renderDiff(change.diff.trimEnd(), {
+        filePath: change.movePath ? `${change.path} -> ${change.movePath}` : change.path,
+      }));
+      assert.ok(output.includes(diff));
+    }
   });
 
   it("does not repeat the call roster after a successful result", () => {
@@ -130,8 +144,7 @@ describe("apply_patch rendering", () => {
       ),
     ].join("\n");
 
-    assert.equal(output.match(/^A hello\.txt \+1$/gm)?.length, 1);
-    assert.match(output, /^apply_patch$/m);
+    assert.equal(output.split("hello.txt").length - 1, 1);
     assert.match(output, /^\+1 Hello World$/m);
   });
 
@@ -149,20 +162,14 @@ describe("apply_patch rendering", () => {
       ],
     };
 
-    assert.match(
-      plain(
-        renderApplyPatchResult(
-          { content: [], details: outcome },
-          false,
-          theme,
-          false,
-        ),
-      ),
-      /M before\.ts -> after\.ts/,
-    );
+    const output = plain(renderApplyPatchResult(
+      { content: [], details: outcome }, false, theme, false,
+    ));
+    assert.ok(output.includes(outcome.changes[0]!.path));
+    assert.ok(output.includes(outcome.changes[0]!.movePath!));
   });
 
-  it("bounds collapsed diff output and shows the expand hint", () => {
+  it("bounds collapsed diff output and reveals omitted rows when expanded", () => {
     const diff = Array.from(
       { length: 400 },
       (_, index) => `+${index + 1} added ${index}`,
@@ -191,8 +198,13 @@ describe("apply_patch rendering", () => {
       .split("\n")
       .filter((line) => /^[+ -]\d+\s/.test(line));
     assert.ok(diffRows.length <= 200);
-    assert.match(output, /diff lines?.*hidden/);
-    assert.match(output, /to expand/);
+    assert.ok(diffRows.length > 0);
+    assert.doesNotMatch(output, /added 399/);
+    const expanded = plain(renderApplyPatchResult(
+      { content: [], details: outcome }, true, theme, false,
+    ));
+    assert.equal(expanded.split("\n").filter((line) => /^[+ -]\d+\s/.test(line)).length, 400);
+    assert.ok(expanded.includes("added 399"));
   });
 
   it("sanitizes and bounds error output", () => {
@@ -215,6 +227,7 @@ describe("apply_patch rendering", () => {
 
     assert.doesNotMatch(output, /\x1b/);
     assert.ok(output.split("\n").length <= 200);
-    assert.match(output, /error lines hidden/);
+    assert.ok(output.includes("unsafe"));
+    assert.ok(output.split("\n").filter((line) => line === "line").length < 300);
   });
 });

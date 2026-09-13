@@ -106,21 +106,22 @@ test("picker failure/expired ID is inert and does not leak executor exception de
   assert.equal(closes, 1, "failed refresh cannot trap the user in detail");
 });
 
-test("approval scope preserves command, authority and inspectable input/control bytes", () => {
+test("approval scope preserves launch settings and inspectable input/control bytes", () => {
   const launch = { cmd: "printf 'safe\\n'", cwd: "/test", shell: "/bin/sh", login: false, stdin: false } as Launch;
   const scope = launchSubject(launch).map(inertText);
   assert.ok(scope.some((line) => line.includes(launch.cmd)));
   assert.match(scope.join("\n"), /\/bin\/sh -c/);
-  assert.match(scope.join("\n"), /stdin closed/);
-  assert.match(scope.join("\n"), /host authority/);
+  assert.ok(scope.some((line) => line.includes(launch.cwd)));
+  assert.notDeepEqual(launchSubject({ ...launch, stdin: true }).map(inertText), scope);
+  assert.ok(launchSubject({ ...launch, login: true }).join("\n").includes("/bin/sh -lc"));
   const multilineScope = launchSubject({
     ...launch,
     cmd: "\nprintf hi\u001b[31m",
   }).map(inertText);
-  assert.ok(multilineScope.some((line) => line.includes("Line 1: (empty)")));
-  assert.ok(multilineScope.some((line) => line.includes("Line 2: printf hi\\u{1b}[31m")));
+  assert.equal(multilineScope.length, scope.length + 2);
+  assert.ok(multilineScope.some((line) => line.includes("printf hi\\u{1b}[31m")));
   assert.doesNotMatch(multilineScope.join("\n"), /\\u\{a\}/);
   const input = inputSubject(job(1), { kind: "write", chars: "line\n" }).map(inertText).join("\n");
-  assert.match(input, /5 bytes/);
+  assert.ok(input.includes(String(Buffer.byteLength("line\n"))));
   assert.ok(input.includes("line\\u{a}"));
 });

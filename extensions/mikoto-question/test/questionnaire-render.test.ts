@@ -23,12 +23,14 @@ function makeTui(): TUI {
 }
 
 describe("RequestUserInputComponent", () => {
-	it("uses the Mikoto display name for the tool call", () => {
+	it("updates the tool call summary when the question count changes", () => {
 		const call = renderRequestCall({ questions }, plainTheme as Theme);
-		assert.match(call.render(80).join("\n"), /Question 2 questions/);
+		const single = renderRequestCall({ questions: questions.slice(0, 1) }, plainTheme as Theme);
+		assert.notDeepEqual(call.render(80), single.render(80));
+		assert.ok(call.render(80).every((line) => visibleWidth(line) <= 80));
 	});
 
-	it("renders Codex-like progress, automatic option, and hints within width", () => {
+	it("renders caller options within width and updates selection and question navigation", () => {
 		const component = new RequestUserInputComponent(
 			questions,
 			makeTui(),
@@ -38,10 +40,21 @@ describe("RequestUserInputComponent", () => {
 		);
 		const lines = component.render(80);
 		const output = lines.join("\n");
-		assert.match(output, /Question 1\/2 \(2 unanswered\)/);
-		assert.match(output, /› 1\. PostgreSQL \(Recommended\)/);
-		assert.match(output, /3\. None of the above/);
-		assert.match(output, /←\/→ to navigate questions/);
+		for (const option of questions[0]!.options) assert.ok(output.includes(option.label));
+		assert.equal(component.controller.options.length, questions[0]!.options.length + 1);
+		component.handleInput("\x1b[B");
+		assert.equal(component.controller.currentAnswer?.highlightedIndex, 1);
+		assert.notDeepEqual(component.render(80), lines);
+		component.handleInput("\x1b[B");
+		assert.equal(component.controller.currentAnswer?.highlightedIndex, component.controller.otherOptionIndex);
+		const beforeNavigation = component.render(80);
+		component.handleInput("\x1b[C");
+		assert.equal(component.controller.currentIndex, 1);
+		assert.notDeepEqual(component.render(80), beforeNavigation);
+		for (const option of questions[1]!.options) assert.ok(component.render(80).join("\n").includes(option.label));
+		component.handleInput("\x1b[D");
+		assert.equal(component.controller.currentIndex, 0);
+		assert.equal(component.controller.currentAnswer?.highlightedIndex, component.controller.otherOptionIndex);
 		for (const line of lines) assert.ok(visibleWidth(line) <= 80);
 	});
 
@@ -83,11 +96,13 @@ describe("RequestUserInputComponent", () => {
 		component.handleInput("\x1b[C");
 		component.handleInput("\x7f");
 		component.handleInput("\r");
-		assert.match(
-			component.render(80).join("\n"),
-			/Submit with unanswered questions\?/,
-		);
+		assert.equal(component.controller.isConfirmationFocused, true);
+		const confirmation = component.render(80);
+		assert.ok(confirmation.length > 0);
+		assert.ok(confirmation.every((line) => visibleWidth(line) <= 80));
 		component.handleInput("\x1b");
 		assert.equal(component.controller.currentIndex, 0);
+		assert.equal(component.controller.isConfirmationFocused, false);
+		assert.notDeepEqual(component.render(80), confirmation);
 	});
 });

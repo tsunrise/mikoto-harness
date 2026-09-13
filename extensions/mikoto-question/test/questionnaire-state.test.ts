@@ -43,7 +43,7 @@ describe("QuestionnaireState", () => {
 		});
 	});
 
-	it("opens notes for None of the above and appends a trimmed user_note", () => {
+	it("opens notes for the automatic option and appends a trimmed user_note", () => {
 		const state = new QuestionnaireState([questions[0]!]);
 		state.setHighlightedOption(state.otherOptionIndex);
 		assert.equal(state.acceptHighlighted().type, "render");
@@ -53,7 +53,7 @@ describe("QuestionnaireState", () => {
 		if (action.type !== "complete") return;
 		assert.deepEqual(action.response.answers.database, {
 			answers: [
-				"None of the above",
+				OTHER_OPTION.label,
 				"user_note: Need an embedded database.",
 			],
 		});
@@ -107,7 +107,7 @@ describe("QuestionnaireState", () => {
 		assert.equal(action.type, "complete");
 		if (action.type !== "complete") return;
 		assert.deepEqual(action.response.answers.database, {
-			answers: ["None of the above"],
+			answers: [OTHER_OPTION.label],
 		});
 	});
 });

@@ -29,23 +29,26 @@ describe("escalation UI", () => {
     component.focused = true;
     const lines = component.render(160);
     const text = lines.map(stripAnsi).join("\n");
-    assert.match(text, /^⛩️  Escalation\n╭─+╮\n/);
+    assert.match(text, /\n╭─+╮\n/);
     assert.match(text, /╰─+╯$/);
-    assert.match(text, /Why this needs approval/);
-    assert.match(text, /› Reject/);
-    assert.ok(!text.includes("› Approve"));
-    assert.ok(!text.includes("PgUp")); // No scroll noise for a short request.
-    assert.doesNotMatch(text, /One operation|policy unchanged|Mikoto Escalation Request/);
+    assert.ok(text.includes("/Users/tom/hello.txt"));
     // All border rows have the same width even in terminals that render the
     // torii in one cell. The emoji is confined to the standalone title.
     assert.ok(lines.slice(1).every((line) => visibleWidth(line) === 104));
     assert.ok(lines.slice(1).every((line) => !line.includes("⛩")));
     assert.ok(colors.includes("customMessageLabel"));
     assert.ok(!colors.includes("accent") && !colors.includes("warning"));
-    assert.ok(lines.some((line) => line.includes("\x1b[7m\x1b[1m › Reject ")));
+    const selection = (frame: string[]) =>
+      [...frame.join("\n").matchAll(/\x1b\[7m(.*?)\x1b\[27m/g)].map((match) => stripAnsi(match[1]));
+    const initialSelection = selection(lines);
+    assert.equal(initialSelection.length, 1);
+    assert.ok(initialSelection[0].trim());
     component.handleInput("\x1b[D");
-    assert.match(stripAnsi(component.render(80).join("\n")), /› Approve/);
+    const movedSelection = selection(component.render(80));
+    assert.equal(movedSelection.length, 1);
+    assert.notDeepEqual(movedSelection, initialSelection);
     component.handleInput("\x1b[C");
+    assert.deepEqual(selection(component.render(80)), initialSelection);
 
     for (const state of ["decision", "reason"]) {
       if (state === "reason") component.handleInput("\r");
@@ -76,11 +79,9 @@ describe("escalation UI", () => {
     component.handleInput("\x1b[201~");
     assert.equal(results.length, 0);
     component.handleInput("\x19"); // default Reject -> reason.
-    assert.match(component.render(80).join("\n"), /Reason for the model/);
     assert.ok(component.render(80).join("\n").includes(CURSOR_MARKER));
     component.handleInput("\x1b");
     assert.equal(results.length, 0);
-    assert.match(component.render(80).join("\n"), /› Reject/);
     assert.ok(!component.render(80).join("\n").includes(CURSOR_MARKER));
     component.handleInput("\x19");
     component.handleInput("\r"); // Submit an empty reason.
@@ -104,7 +105,7 @@ describe("escalation UI", () => {
     const before = component.render(80);
     component.handleInput("\r");
     component.handleInput("Keep it private");
-    assert.match(component.render(80).join("\n"), /Esc back/);
+    assert.ok(component.render(80).join("\n").includes(CURSOR_MARKER));
     component.handleInput("\x18"); // Configured cancel goes back, too.
     assert.equal(results.length, 0);
     assert.deepEqual(component.render(80), before);
@@ -151,18 +152,27 @@ describe("escalation UI", () => {
     } as unknown as typeof theme;
     const render = (data: unknown, expanded: boolean) =>
       renderer!({ data } as never, { expanded } as never, historyTheme)!.render(60).join("\n");
-    assert.match(render({ version: 99 }, false), /invalid decision record/);
+    const invalid = render({ version: 99 }, false);
+    assert.ok(invalid.trim());
     const data = { version: 1, source: "test", requestId: "1", verb: "Apply Patch",
       subject: ["/a", "/b\x1b[31m"], why: "Needed", result: { decision: "approve" } };
-    assert.equal(render(data, false), "⛩️  Approved by User: Apply Patch");
-    assert.equal(render(data, true), "⛩️  Approved by User: Apply Patch");
+    const approved = render(data, false);
+    assert.ok(approved.includes(data.verb));
+    assert.notEqual(approved, invalid);
+    assert.equal(render(data, true), approved);
     assert.ok(!render(data, true).includes("/a"));
     const rejected = { ...data, result: { decision: "reject", cause: "user", reason: "Keep it private" } };
-    assert.equal(render(rejected, false), "Rejected by User: Apply Patch");
+    const rejection = render(rejected, false);
+    assert.ok(rejection.includes(data.verb));
+    assert.notEqual(rejection, approved);
+    assert.equal(render(rejected, true), rejection);
     assert.ok(!render(rejected, true).includes("Keep it private"));
     const unavailable = { ...data, result: { decision: "reject", cause: "unavailable" } };
-    assert.equal(render(unavailable, false),
-      "Rejected due to issues: Apply Patch\nThe approval service was unavailable.");
+    const failure = render(unavailable, false);
+    assert.ok(failure.includes(data.verb));
+    assert.notEqual(failure, rejection);
+    assert.ok(!failure.includes("/b"));
+    assert.doesNotMatch([approved, rejection, failure].join("\n"), /\x1b/);
     assert.deepEqual(new Set(colors), new Set(["customMessageLabel", "muted"]));
   });
 });

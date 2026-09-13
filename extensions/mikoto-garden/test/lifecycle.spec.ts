@@ -83,21 +83,22 @@ test("real tool ACK retires jobs but preserves formatter-only omission logs; gen
       return h.notices.at(-1)!;
     };
     const input = (session_id: number) => h.tools.get("write_stdin")!.execute("collect", { session_id }, undefined, undefined, h.ctx);
-    assert.match(await ps(), /No managed processes/);
+    const emptyView = await ps();
+    assert.ok(emptyView.trim());
     const result = await h.exec({
       cmd: `${shellQuote(process.execPath)} -e 'process.stdout.write("x\\n".repeat(1998))'`, login: false,
     });
     const details = result.details as Delivery;
     assert.ok(details.omitted > 0);
     assert.equal(await readFile(details.log, "utf8"), "x\n".repeat(1998));
-    assert.match(await ps(), /No managed processes/);
+    assert.equal(await ps(), emptyView);
     await assert.rejects(input(details.job.id), /Unknown or expired/);
     const live = await h.exec({ cmd: "sleep 11; printf uncollected", login: false, yield_time_ms: 0 });
     const id = (live.details as Delivery).job.id;
     await new Promise((resolve) => setTimeout(resolve, 1100));
     assert.match(await ps(), new RegExp(String(id)));
     await h.emit("session_start");
-    assert.match(await ps(), /No managed processes/);
+    assert.equal(await ps(), emptyView);
     await assert.rejects(input(id), /Unknown or expired/);
     await assert.rejects(access(details.log), { code: "ENOENT" }, "normal generation teardown still removes runtime logs");
   });

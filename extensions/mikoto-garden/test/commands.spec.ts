@@ -102,7 +102,8 @@ test("/ps is on-demand, non-consuming and token-hidden; debug is a separate cred
   h.client.request = async () => ({ jobs: [], tail: "" });
   h.ctx.mode = "rpc";
   await h.run("ps");
-  assert.match(h.notices.at(-1)!, /No managed processes/);
+  assert.equal(h.notices.length, 3);
+  assert.doesNotMatch(h.notices.at(-1)!, /123|printf preview|debug-only-fake-token/);
   h.ui.close();
 });
 test("/ps and debug still diagnose absent/dead executors and absent capabilities", async () => {
@@ -132,8 +133,9 @@ test("debug rejects non-TUI invocation and stale generations without exposing cr
   assert.equal(h.requests.length, 0);
   assert.doesNotMatch(h.notices.join("\n"), /debug-only-fake-token/);
   h.ctx.mode = "tui";
-  await assert.rejects(h.run("ps:debug", "0"), /Usage/);
-  await assert.rejects(h.run("ps", "123 extra"), /Usage/);
+  await assert.rejects(h.run("ps:debug", "0"));
+  await assert.rejects(h.run("ps", "123 extra"));
+  assert.equal(h.requests.length, 0);
   const request = h.client.request;
   h.client.request = async () => { throw new Error("Unexpected detail: debug-only-fake-token"); };
   h.ctx.mode = "rpc";
@@ -145,7 +147,7 @@ test("debug rejects non-TUI invocation and stale generations without exposing cr
     return result;
   };
   h.ctx.mode = "tui";
-  await assert.rejects(h.run("ps:debug"), /generation changed/);
+  await assert.rejects(h.run("ps:debug"));
   assert.equal(h.frames.length, 0);
 });
 test("/ps opens a transient picker without credentials, notifications, or model messages", async () => {

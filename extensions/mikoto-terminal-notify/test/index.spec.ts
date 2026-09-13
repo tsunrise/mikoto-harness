@@ -92,14 +92,17 @@ test("binds one notification route, sanitizes UI text and disposes duplicate bin
 });
 
 test("reports missing and rejected binding acknowledgements", () => {
-  assert.deepEqual(fixture(true, "none").notices, [{
-    text: "Terminal notification capability unavailable",
-    type: "warning",
-  }]);
-  assert.deepEqual(fixture(true, "failure").notices, [{
-    text: "Terminal notification capability unavailable: Route already bound",
-    type: "warning",
-  }]);
+  const missing = fixture(true, "none");
+  const rejected = fixture(true, "failure");
+  for (const h of [missing, rejected]) {
+    assert.equal(h.notices.length, 1);
+    assert.equal(h.notices[0].type, "warning");
+    assert.equal(h.primaryDisposed(), false);
+    assert.equal(h.duplicateDisposed(), false);
+  }
+  assert.ok(rejected.notices[0].text.includes("Route already bound"));
+  assert.deepEqual(fixture(false, "none").notices, []);
+  assert.deepEqual(fixture(false, "failure").notices, []);
 });
 
 test("bounds messages, rate limits requests and rejects unavailable UI", async () => {

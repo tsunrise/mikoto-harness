@@ -16,11 +16,13 @@ test("coalesced completion notices exclude already collected jobs", (t) => {
   completed(1);
   ui.collected(1);
   t.mock.timers.tick(251);
-  assert.deepEqual(notices, []);
+  assert.equal(notices.length, 0);
   completed(2); completed(3);
   ui.collected(2);
   t.mock.timers.tick(251);
-  assert.deepEqual(notices, ["Completed: 3 command-3"]);
+  assert.equal(notices.length, 1);
+  assert.ok(notices[0].includes("command-3"));
+  assert.doesNotMatch(notices[0], /command-[12]/);
   completed(4);
   ui.reset();
   t.mock.timers.tick(251);
