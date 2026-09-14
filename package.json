@@ -2,7 +2,7 @@
   "name": "mikoto-harness",
   "private": true,
   "version": "0.0.0",
-  "description": "Workspace for Mikoto Pi extensions, shared libraries, and skills.",
+  "description": "Workspace for Mikoto Pi extensions and shared libraries.",
   "license": "MIT",
   "workspaces": [
     "extensions/*",
