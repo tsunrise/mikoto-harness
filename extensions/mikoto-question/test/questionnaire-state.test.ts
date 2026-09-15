@@ -7,6 +7,32 @@ import {
 import { questions } from "./fixtures.ts";
 
 describe("QuestionnaireState", () => {
+  it("reports answered status only for committed selections at valid indices", () => {
+    const state = new QuestionnaireState(questions);
+    const check = (expected: boolean[]) => {
+      assert.deepEqual(questions.map((_, index) => state.isQuestionAnswered(index)), expected);
+      assert.equal(state.answeredCount, expected.filter(Boolean).length);
+    };
+    check([false, false]);
+    for (const index of [-1, 0.5, questions.length, NaN]) {
+      assert.equal(state.isQuestionAnswered(index), false);
+    }
+    state.commitHighlighted();
+    check([true, false]);
+    state.moveQuestion(1);
+    check([true, false]);
+    state.commitHighlighted();
+    check([true, true]);
+    state.moveOption(1);
+    check([true, false]);
+    state.commitHighlighted();
+    state.setNote("draft");
+    check([true, false]);
+    state.commitHighlighted();
+    state.clearSelection();
+    check([true, false]);
+  });
+
 	it("starts with a highlighted but unanswered first option", () => {
 		const state = new QuestionnaireState(questions);
 		assert.equal(state.currentAnswer?.highlightedIndex, 0);

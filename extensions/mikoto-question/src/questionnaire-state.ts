@@ -82,6 +82,11 @@ export class QuestionnaireState {
 		return answer.committed && answer.highlightedIndex !== null;
 	}
 
+  isQuestionAnswered(index: number): boolean {
+    const answer = this.answers[index];
+    return answer !== undefined && this.isAnswered(answer);
+  }
+
 	moveOption(delta: -1 | 1): QuestionnaireAction {
 		const answer = this.currentAnswer;
 		const optionCount = this.options.length;

@@ -69,6 +69,17 @@ shape:
 
 ## Questionnaire controls
 
+The square strip above the prompt shows one square per question: `■` means
+answered and `□` means unanswered. The current question uses the theme's accent
+color; the other squares use normal text color. Highlighting an option alone
+does not mark it answered.
+
+While tool arguments stream, the transcript previews the available question
+text. That preview disappears when streaming completes, leaving the questions
+in the interactive questionnaire. Completed calls show a compact `Question`
+heading, an answered count (for example, `• 3/3 answered`), and the questions,
+selected answers, and any notes.
+
 - **Up/Down**: move through choices.
 - **1–9**: select a numbered choice and advance.
 - **Space**: commit the highlighted choice without advancing.

@@ -150,8 +150,8 @@ export default function mikotoQuestion(pi: ExtensionAPI): void {
 			};
 		},
 
-		renderCall(args, theme) {
-			return renderRequestCall(args, theme);
+    renderCall(args, theme, context) {
+      return renderRequestCall(args, theme, context);
 		},
 
 		renderResult(result, options, theme) {

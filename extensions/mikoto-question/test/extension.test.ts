@@ -4,6 +4,7 @@ import type {
 	ExtensionAPI,
 	ExtensionContext,
 	KeybindingsManager,
+  ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 import type { TUI } from "@earendil-works/pi-tui";
 import {
@@ -21,6 +22,7 @@ import type {
 import { makeKeybindings, plainTheme } from "./fixtures.ts";
 
 interface CapturedTool {
+  renderCall: NonNullable<ToolDefinition["renderCall"]>;
 	name: string;
 	label: string;
 	description: string;
@@ -192,6 +194,39 @@ const params: RequestUserInputParams = {
 };
 
 describe("extension integration", () => {
+  it("forwards streaming lifecycle and expansion state to the registered call renderer", () => {
+    const { tool } = setupExtension();
+    const context: Parameters<CapturedTool["renderCall"]>[2] = {
+      args: params,
+      toolCallId: "preview-call",
+      invalidate() {},
+      lastComponent: undefined,
+      state: {},
+      cwd: "/tmp/project",
+      executionStarted: false,
+      argsComplete: false,
+      isPartial: true,
+      expanded: false,
+      showImages: false,
+      isError: false,
+    };
+    const preview = tool.renderCall(params, plainTheme, context);
+    assert.ok(preview.render(120).join("\n").includes(params.questions[0]!.question));
+    for (const transition of [
+      { argsComplete: true },
+      { executionStarted: true },
+      { isPartial: false, isError: true },
+    ]) {
+      for (const expanded of [false, true]) {
+        const component = tool.renderCall(params, plainTheme, {
+          ...context, ...transition, expanded, lastComponent: preview,
+        });
+        assert.equal(component.render(120).length, 1);
+        assert.ok(!component.render(120).join("\n").includes(params.questions[0]!.question));
+      }
+    }
+  });
+
 	it("registers the always-available sequential Codex-compatible tool", () => {
 		const { tool } = setupExtension();
 		assert.equal(tool.name, "request_user_input");

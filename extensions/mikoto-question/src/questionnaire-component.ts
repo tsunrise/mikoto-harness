@@ -309,17 +309,17 @@ export class RequestUserInputComponent implements Focusable {
 			return lines;
 		}
 
-		const progress = `Question ${this.state.currentIndex + 1}/${this.state.questionCount}${
-			this.state.unansweredCount > 0
-				? ` (${this.state.unansweredCount} unanswered)`
-				: ""
-		}`;
-		addWrapped(lines, this.theme.fg("dim", progress), width, "  ");
+    const progress = this.state.questions.map((_, index) =>
+      this.theme.fg(
+        index === this.state.currentIndex ? "accent" : "text",
+        this.state.isQuestionAnswered(index) ? "■" : "□",
+      ),
+    ).join(" ");
+    addWrapped(lines, progress, width);
 		addWrapped(
 			lines,
 			this.theme.fg(answer.committed ? "text" : "accent", question.question),
 			width,
-			"  ",
 		);
 		lines.push("");
 

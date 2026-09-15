@@ -1,26 +1,44 @@
-import type { Theme } from "@earendil-works/pi-coding-agent";
+import type { Theme, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
-import type { RequestUserInputParams } from "./schema.ts";
 import type {
 	RequestUserInputAnswer,
 	RequestUserInputDetails,
 	RequestUserInputQuestion,
 } from "./types.ts";
 
+type ToolRenderContext = Parameters<NonNullable<ToolDefinition["renderCall"]>>[2];
+
 export function renderRequestCall(
-	args: RequestUserInputParams,
-	theme: Theme,
+  args: unknown,
+  theme: Theme,
+  context: Pick<ToolRenderContext, "argsComplete" | "executionStarted" | "isPartial">,
 ): Text {
-	const count = Array.isArray(args.questions) ? args.questions.length : 0;
-	const label = `${count} question${count === 1 ? "" : "s"}`;
-	return new Text(
-		`${theme.fg("toolTitle", theme.bold("Question"))} ${theme.fg(
-			"muted",
-			label,
-		)}`,
-		0,
-		0,
-	);
+  const lines = [theme.fg("toolTitle", theme.bold("Question"))];
+  // isPartial stays true while the user answers. We only preview arguments
+  // while they stream; execution and final results also guard restored rows
+  // and aborted streams that never received an argsComplete transition.
+  if (
+    context.argsComplete === false &&
+    context.executionStarted === false &&
+    context.isPartial === true &&
+    isRecord(args) &&
+    Array.isArray(args.questions)
+  ) {
+    for (const question of args.questions) {
+      if (
+        isRecord(question) &&
+        typeof question.question === "string" &&
+        question.question.trim().length > 0
+      ) {
+        lines.push(`  ${theme.fg("dim", "•")} ${theme.fg("text", question.question)}`);
+      }
+    }
+  }
+  return new Text(lines.join("\n"), 0, 0);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 export function renderRequestResult(
@@ -57,7 +75,7 @@ export function formatCompletedRequest(
 		(question) => (answers[question.id]?.answers.length ?? 0) > 0,
 	).length;
 	const lines: string[] = [
-		`${theme.fg("dim", "•")} ${theme.bold("Questions")} ${theme.fg(
+		`${theme.fg("dim", "•")} ${theme.fg(
 			"dim",
 			`${answered}/${questions.length} answered`,
 		)}`,

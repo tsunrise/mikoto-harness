@@ -46,6 +46,12 @@ export const plainTheme = {
 	strikethrough: (text: string) => text,
 } as unknown as Theme;
 
+export const coloredTheme = {
+  ...plainTheme,
+  fg: (color: string, text: string) =>
+    `\x1b[${color === "accent" ? 36 : color === "text" ? 37 : 90}m${text}\x1b[39m`,
+} as Theme;
+
 const defaultBindings: Record<string, string[]> = {
 	"tui.select.up": ["up"],
 	"tui.select.down": ["down"],
