@@ -61,10 +61,10 @@ Follow `../../examples/binding.ts` and these binding rules:
   `GET` has no body and uses `z.undefined()`. `POST` defaults to JSON; set
   `bodyFormat: "text"` only for raw UTF-8 text.
 - Handlers receive the schema's parsed output and an `AbortSignal`. Observe the
-  signal, finish within the roughly five-second request deadline, and do not
+  signal, finish within the 60-second request deadline, and do not
   leave work floating.
 - Return a 2xx, 4xx, or 5xx status. Response bodies are UTF-8 strings limited
-  to 64 KiB; 204 and 205 responses have no body. The only supported response
+  to 100 MiB; 204 and 205 responses have no body. The only supported response
   headers are lowercase `content-type` and `cache-control`.
 - Every command with the session token can call every binding, and handlers run
   with host authority. Bind only narrow operations; never expose a generic

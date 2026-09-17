@@ -51,7 +51,7 @@ test("HTTP framing, byte limits, UTF-8, schema failure and bounded non-leaking e
     assert.equal((await fetch(`${url}/redirect`, { headers: auth, redirect: "manual" })).status, 500);
   } finally { await server.close(); registry.close(); }
 });
-test("schema disposal prevents late handlers; timed-out work retains concurrency slots", { timeout: 15000 }, async () => {
+test("schema disposal prevents late handlers; timed-out work retains concurrency slots", { timeout: 90000 }, async () => {
   const registry = new CapabilityRegistry();
   let release!: () => void;
   const gate = new Promise<void>((resolve) => { release = resolve; });
@@ -77,4 +77,56 @@ test("schema disposal prevents late handlers; timed-out work retains concurrency
     await new Promise((resolve) => setTimeout(resolve, 20));
     assert.equal(handlers, 0);
   } finally { release(); await server.close(); registry.close(); }
+});
+
+test("responses are byte-bounded at 100 MiB, including multibyte UTF-8", { timeout: 30000 }, async () => {
+  const registry = new CapabilityRegistry();
+  let body = "";
+  registry.bind({
+    owner: "test", method: "GET", path: "/large", bodySchema: z.undefined(),
+    async handler() { return { status: 200, body }; },
+  });
+  const server = await CapabilityServer.start(registry, () => {});
+  assert.ok(server?.endpoint);
+  const { url, token } = server.endpoint;
+  try {
+    // Keep one large string at a time and drain bytes rather than asking fetch
+    // to retain a second 100 MiB text copy in the test process.
+    for (const [size, status] of [[65538, 200], [100 * 1024 * 1024, 200], [100 * 1024 * 1024 + 1, 500]]) {
+      body = "é".repeat(Math.floor(size / 2)) + (size % 2 ? "x" : "");
+      const response = await fetch(`${url}/large`, { headers: { authorization: `Bearer ${token}` } });
+      assert.equal(response.status, status);
+      if (status === 200) {
+        let bytes = 0;
+        for await (const chunk of response.body!) bytes += chunk.byteLength;
+        assert.equal(bytes, size);
+      } else {
+        const error = await response.text();
+        assert.ok(error.length < 1000);
+        assert.ok(!error.includes("é"));
+      }
+      body = "";
+    }
+  } finally { await server.close(); registry.close(); }
+});
+
+test("a handler may finish after the former five-second deadline", { timeout: 15000 }, async () => {
+  const registry = new CapabilityRegistry();
+  registry.bind({
+    owner: "test", method: "GET", path: "/wait", bodySchema: z.undefined(),
+    async handler({ signal }) {
+      await new Promise((resolve) => setTimeout(resolve, 5100));
+      signal.throwIfAborted();
+      return { status: 200, body: "completed" };
+    },
+  });
+  const server = await CapabilityServer.start(registry, () => {});
+  assert.ok(server?.endpoint);
+  try {
+    const response = await fetch(`${server.endpoint.url}/wait`, {
+      headers: { authorization: `Bearer ${server.endpoint.token}` },
+    });
+    assert.equal(response.status, 200);
+    assert.equal(await response.text(), "completed");
+  } finally { await server.close(); registry.close(); }
 });

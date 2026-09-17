@@ -38,7 +38,7 @@ configuration is needed.
   acceptance.>
 
 ```sh
-curl --disable --silent --show-error --fail --max-time 5 \
+curl --disable --silent --show-error --fail --max-time 65 \
   --header "Authorization: Bearer $GARDEN_TOKEN" \
   <add any content-type header and request body options required by the endpoint> \
   "$GARDEN_SERVER/<route>"

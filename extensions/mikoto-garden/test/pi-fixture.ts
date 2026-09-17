@@ -1,6 +1,5 @@
 // Explicitly loaded only for real Pi smoke tests; no production integration.
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import type { ExtensionAPI, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import garden from "../src/index.ts";
 import type { Delivery } from "../src/protocol.ts";
@@ -52,14 +51,12 @@ export default function fixture(pi: ExtensionAPI): void {
       const id = (first.details as { job: { id: number } }).job.id;
       const done = await input.execute("smoke-eof", { session_id: id, close_stdin: true }, undefined, undefined, ctx);
       assert.match(done.content[0].type === "text" ? done.content[0].text : "", /Process exited with code 0/);
-      const skill = await readFile(
-        new URL("../../mikoto-terminal-notify/skills/terminal-notify/SKILL.md", import.meta.url),
-        "utf8",
-      );
-      const helper = skill.match(/```sh\n([\s\S]*?)\n```/)?.[1];
-      assert.ok(helper);
       const notification = await exec.execute("smoke-capability", {
-        cmd: `${helper}\nnotify_progress GARDEN_CAPABILITY_OK`,
+        // Exercise the capability itself, not a shell-function name or code
+        // block extracted from the skill's changeable explanatory examples.
+        cmd: 'curl --disable --silent --show-error --fail --max-time 5 ' +
+          '--header "Authorization: Bearer $GARDEN_TOKEN" ' +
+          '--data-binary GARDEN_CAPABILITY_OK "$GARDEN_SERVER/update"',
         login: false,
       }, undefined, undefined, ctx);
       assert.match(notification.content[0].type === "text" ? notification.content[0].text : "", /Process exited with code 0/);

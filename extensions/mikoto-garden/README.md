@@ -54,6 +54,11 @@ extensions through the typed `mikoto-garden:bind` event. See
 its own usage skill. Terminal notifications are provided separately by the
 `mikoto-terminal-notify` extension.
 
+Capability requests have a global 60-second deadline, a 16 KiB request-body
+limit, and a 100 MiB UTF-8 response-body limit. Shell-output truncation bounds
+model-visible output, not host memory: concurrent handlers can still buffer
+large responses.
+
 ## System prompt injection
 
 Before each agent run, Garden appends a short deterministic command-execution

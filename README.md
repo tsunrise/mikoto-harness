@@ -13,6 +13,9 @@ personal agent system *Mikoto*. Some extension packages bundle Pi skills.
 
 The root is a private npm workspace.
 
+`extensions/mikoto-web/` provides authenticated OpenAI web-search capabilities
+for Garden commands and bundles the `web` skill.
+
 `extensions/mikoto-plan/` provides `/plan` and `/lgtm` for conversational
 planning with a Markdown deliverable. Load it alongside `mikoto-question`;
 see its README for command semantics and advisory research/cleanup rules.

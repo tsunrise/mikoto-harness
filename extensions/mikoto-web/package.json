@@ -1,0 +1,33 @@
+{
+  "name": "mikoto-web",
+  "version": "0.1.0",
+  "description": "Mikoto Web: authenticated standalone OpenAI web search for managed commands.",
+  "type": "module",
+  "license": "MIT",
+  "keywords": ["pi-package", "pi-extension"],
+  "scripts": {
+    "check": "tsc --noEmit && node --check skills/web/scripts/web.mjs",
+    "test": "node --test test/*.spec.ts",
+    "validate": "npm run check && npm test"
+  },
+  "dependencies": {
+    "zod": "^4.0.0"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "0.85.1",
+    "@types/node": "^24.0.0",
+    "mikoto-types": "^0.1.0",
+    "typescript": "^5.9.0"
+  },
+  "files": ["index.ts", "src", "skills", "README.md"],
+  "pi": {
+    "extensions": ["./index.ts"],
+    "skills": ["./skills"]
+  },
+  "engines": {
+    "node": ">=26"
+  }
+}

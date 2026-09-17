@@ -7,10 +7,10 @@ import { CapabilityRegistry, canonicalRoute } from "./capability-registry.ts";
 export const HTTP_LIMITS = Object.freeze({
   headers: 8192,
   body: 16 * 1024,
-  response: 64 * 1024,
+  response: 100 * 1024 * 1024,
   concurrent: 8,
   connections: 32,
-  deadline: 5000,
+  deadline: 60_000,
 });
 export type Endpoint = Readonly<{ url: string; port: number; token: string }>;
 const Envelope = z.strictObject({
