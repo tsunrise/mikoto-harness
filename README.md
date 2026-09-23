@@ -20,6 +20,18 @@ for Garden commands and bundles the `web` skill.
 planning with a Markdown deliverable. Load it alongside `mikoto-question`;
 see its README for command semantics and advisory research/cleanup rules.
 
+`extensions/mikoto-vscode-context/` captures the active VS Code file and
+selections for Pi prompts, with `/vscode toggle` and `/vscode preview`.
+Install its companion local VSIX from `vscode/mikoto/` and start Pi in a
+**new VS Code integrated terminal**. See both package READMEs for setup and
+the privacy implications of persistent editor snapshots.
+
+`vscode/mikoto/` is a standalone npm package, not a root workspace.
+Root validation does **not** check it; run `npm install` and
+`npm run validate` in that directory separately.
+See `docs/vscode-context-validation.md` for implementation validation results
+and the remaining live smoke-test checklist.
+
 ```bash
 npm install
 

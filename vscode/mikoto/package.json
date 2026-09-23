@@ -1,0 +1,39 @@
+{
+  "name": "mikoto-vscode-context",
+  "displayName": "Mikoto VS Code Context",
+  "publisher": "mikoto",
+  "version": "0.1.0",
+  "description": "On-demand local editor context for Pi integrated terminals.",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "*"
+  ],
+  "extensionKind": [
+    "workspace"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false
+    }
+  },
+  "scripts": {
+    "check": "tsc --noEmit && tsc -p tsconfig.test.json",
+    "test": "tsx --test test/*.test.ts",
+    "build": "tsc && node scripts/stage-license.cjs",
+    "validate": "npm run check && npm test && npm run build",
+    "vscode:prepublish": "npm run build",
+    "package": "vsce package --no-dependencies --allow-missing-repository",
+    "test:vsix": "node scripts/smoke-vsix.cjs"
+  },
+  "devDependencies": {
+    "@types/vscode": "1.90.0",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.9.0",
+    "tsx": "^4.20.0",
+    "@vscode/vsce": "^3.6.0"
+  }
+}

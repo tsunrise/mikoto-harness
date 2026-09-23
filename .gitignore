@@ -2,3 +2,6 @@
 **/coverage/
 *.log
 **/.DS_Store
+/vscode/mikoto/dist/
+/vscode/mikoto/LICENSE
+/vscode/mikoto/*.vsix
