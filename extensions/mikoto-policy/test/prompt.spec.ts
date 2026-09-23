@@ -37,7 +37,7 @@ async function workspace(t: TestContext) {
 
 function snapshot(result: { systemPrompt: string } | undefined): MikotoPolicyDocument {
   assert.ok(result);
-  const match = result.systemPrompt.match(/```json\n([\s\S]*?)\n```/);
+  const match = result.systemPrompt.match(/<snapshot format="json">\n([\s\S]*?)\n<\/snapshot>/);
   assert.ok(match);
   return JSON.parse(match[1]) as MikotoPolicyDocument;
 }
@@ -46,7 +46,7 @@ it("chains the policy snapshot once, unchanged across modes and active tools", a
   const { cwd, globalConfigPath, ctx } = await workspace(t);
   const config = {
     filesystem: {
-      denyRead: ["z-private", "a-private", 'line\n"break'],
+      denyRead: ["z-private", "a-private", 'line\n"break', "name<&>\ufffesuffix"],
       allowRead: ["z-private/public", "a-private/public"],
       allowWrite: ["z-output", "a-output"],
       denyWrite: ["z-output/locked", "a-output/locked"],
@@ -58,8 +58,8 @@ it("chains the policy snapshot once, unchanged across modes and active tools", a
   };
   const loader = new MikotoPolicyDocumentLoader(config, globalConfigPath);
   const h = capturePrompt(loader);
-  // An unrelated Permissions heading must not suppress this extension's block.
-  const previous = "Chained previous instructions.\n\n## Permissions\nExisting provider guidance.";
+  // An unrelated permission block must not suppress this extension's block.
+  const previous = "Chained previous instructions.\n\n<permission>Existing provider guidance.</permission>";
   const result = (await h.render({ systemPrompt: previous }, ctx))!;
   assert.ok(result.systemPrompt.startsWith(`${previous}\n\n`));
   assert.equal(await h.render(result, ctx), undefined);
@@ -75,6 +75,8 @@ it("chains the policy snapshot once, unchanged across modes and active tools", a
   }
   // Unusual path characters must remain JSON data, not new prompt lines.
   assert.ok(!result.systemPrompt.includes('line\n"break'));
+  assert.ok(!result.systemPrompt.includes("name<&>\ufffesuffix"));
+  assert.ok(!result.systemPrompt.includes("\ufffe"));
   for (const tools of [[], ["read", "apply_patch"], ["write"], ["bash"]]) {
     h.setActiveTools(tools);
     for (const mode of ["tui", "rpc", "print", "json"] as const) {

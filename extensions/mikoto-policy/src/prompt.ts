@@ -2,15 +2,11 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { MikotoPolicyDocument } from "mikoto-types";
 import type { MikotoPolicyDocumentLoader } from "./config.ts";
 
-const POLICY_HEADING = "## Permissions";
-
 const POLICY_GUIDANCE = `Filesystem: Reads are allowed by default; the most specific allowRead or denyRead match wins, and allowRead wins ties. Writes require allowWrite, and denyWrite always wins.
 
 Network: Access is denied by default; allowedDomains grants matching destinations unless deniedDomains matches. Garden's exact live capability endpoint is the only automatic localhost exception.`;
 
-const ESCALATION_GUIDANCE = `### Escalation
-
-Each escalation requires manual user action, so repeated requests are disruptive. Keep escalation infrequent by working within the policy whenever possible. Tools without an explicit escalation parameter automatically escalate policy violations.`;
+const ESCALATION_GUIDANCE = "Each escalation requires manual user action, so repeated requests are disruptive. Keep escalation infrequent by working within the policy whenever possible. Tools without an explicit escalation parameter automatically escalate policy violations.";
 
 export function installPolicyPrompt(
   loader: MikotoPolicyDocumentLoader,
@@ -41,6 +37,23 @@ function renderPolicyPrompt(document: MikotoPolicyDocument): string {
       allowedDomains: [...document.network.allowedDomains].sort(),
       deniedDomains: [...document.network.deniedDomains].sort(),
     },
-  }, null, 2);
-  return `${POLICY_HEADING}\n\n\`\`\`json\n${snapshot}\n\`\`\`\n\n${POLICY_GUIDANCE}\n\n${ESCALATION_GUIDANCE}`;
+  }, null, 2)
+    // JSON escapes preserve the original values when parsed, while ensuring
+    // paths and domains cannot introduce XML markup, entities, or invalid characters.
+    .replaceAll("&", "\\u0026")
+    .replaceAll("<", "\\u003c")
+    .replaceAll(">", "\\u003e")
+    .replaceAll("\ufffe", "\\ufffe")
+    .replaceAll("\uffff", "\\uffff");
+  return `<permission>
+<snapshot format="json">
+${snapshot}
+</snapshot>
+<rules>
+${POLICY_GUIDANCE}
+</rules>
+<escalation>
+${ESCALATION_GUIDANCE}
+</escalation>
+</permission>`;
 }

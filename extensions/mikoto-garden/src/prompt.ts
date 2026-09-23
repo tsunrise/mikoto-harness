@@ -1,9 +1,8 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { MikotoPolicyDocument } from "mikoto-types";
 
-const GUIDANCE = `## Command execution
-
-exec_command runs in a sandbox governed by the active policy (see Permissions for
+const GUIDANCE = `<sandbox>
+exec_command runs in a sandbox governed by the active policy (see the permission block for
 filesystem and network rules). Escalation runs outside the sandbox with host
 authority and requires manual user approval for each launch or later
 input/EOF/interrupt; polling does not. Never bypass a denial or rejected approval.
@@ -15,9 +14,11 @@ it for temporary intermediate files, not as the sole copy of important results;
 copy those to an allowed durable path.
 
 While a command runs, do meaningful non-overlapping work first. If none remains,
-poll with a long wait instead of repeatedly polling.`;
-const UNAVAILABLE =
-  "## Command execution\n\nNo valid policy snapshot is available. Command execution, including escalation, is unavailable. Never bypass this through another tool or user-shell execution path.";
+poll with a long wait instead of repeatedly polling.
+</sandbox>`;
+const UNAVAILABLE = `<sandbox>
+No valid policy snapshot is available. Command execution, including escalation, is unavailable. Never bypass this through another tool or user-shell execution path.
+</sandbox>`;
 
 export function renderGardenPrompt(document?: MikotoPolicyDocument): string {
   return document ? GUIDANCE : UNAVAILABLE;

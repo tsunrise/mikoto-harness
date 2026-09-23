@@ -114,7 +114,7 @@ test("capability startup failure preserves both execution modes and stable promp
     assert.equal(starts, 1);
     assert.deepEqual(h.active(), ["read", "exec_command", "write_stdin", "other"]);
     assert.equal(h.hooks.has("user_bash"), false);
-    const prompt = await h.emit("before_agent_start", { systemPrompt: "## Command execution\nExisting unrelated heading" });
+    const prompt = await h.emit("before_agent_start", { systemPrompt: "<sandbox>Existing unrelated guidance</sandbox>" });
     for (const sandbox_permissions of ["use_default", "require_escalated"]) {
       const result = await h.exec({
         cmd: 'test -z "${GARDEN_TOKEN+x}" && test -z "${GARDEN_SERVER+x}" && printf no-capabilities',
@@ -125,7 +125,7 @@ test("capability startup failure preserves both execution modes and stable promp
       assert.match(text, /Capabilities: unavailable/);
       assert.match(text, /Process exited with code 0/);
     }
-    assert.deepEqual(await h.emit("before_agent_start", { systemPrompt: "## Command execution\nExisting unrelated heading" }), prompt);
+    assert.deepEqual(await h.emit("before_agent_start", { systemPrompt: "<sandbox>Existing unrelated guidance</sandbox>" }), prompt);
     h.pi.setActiveTools(["bash", "other"]);
     await h.emit("before_agent_start", { systemPrompt: "" });
     assert.deepEqual(h.active(), ["other"]);

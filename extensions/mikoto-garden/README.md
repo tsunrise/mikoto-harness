@@ -61,8 +61,8 @@ large responses.
 
 ## System prompt injection
 
-Before each agent run, Garden appends a short deterministic command-execution
-block to Pi's system prompt. It explains sandboxing, manual escalation,
+Before each agent run, Garden appends a short deterministic `<sandbox>` block
+to Pi's system prompt. It explains sandboxing, manual escalation,
 and long-running command polling; Mikoto Policy separately owns the effective
 filesystem and network rules.
 

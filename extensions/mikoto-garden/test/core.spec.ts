@@ -5,10 +5,11 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import { z } from "zod";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { MikotoEventEmitter, MikotoPolicyDocument, MikotoPolicyEscalateEvent } from "mikoto-types";
 import { CapabilityRegistry } from "../src/capability-registry.ts";
 import { CapabilityServer } from "../src/capability-server.ts";
-import { renderGardenPrompt } from "../src/prompt.ts";
+import { installGardenPrompt, renderGardenPrompt } from "../src/prompt.ts";
 import { evaluateDestination } from "../src/executor/network-policy.ts";
 import {
   safeEnvironment,
@@ -117,6 +118,21 @@ test("strict post-hook inputs, pipe classifications, environment and determinist
     "Policy, not Garden, owns the effective network snapshot");
   assert.notEqual(renderGardenPrompt(), prompt);
   assert.deepEqual(document.network.allowedDomains, ["example.com", "*.example.org:443"]);
+});
+test("command guidance appends once, including when policy is unavailable", () => {
+  let handler!: (event: { systemPrompt: string }) => { systemPrompt: string } | undefined;
+  let current: MikotoPolicyDocument | undefined = document;
+  installGardenPrompt({
+    on(_event: string, fn: typeof handler) { handler = fn; },
+  } as unknown as ExtensionAPI, () => current);
+  const previous = "<sandbox>Other guidance</sandbox>";
+  const available = handler({ systemPrompt: previous })!;
+  assert.equal(available.systemPrompt, `${previous}\n\n${renderGardenPrompt(document)}`);
+  assert.equal(handler(available), undefined);
+  current = undefined;
+  const unavailable = handler({ systemPrompt: previous })!;
+  assert.equal(unavailable.systemPrompt, `${previous}\n\n${renderGardenPrompt()}`);
+  assert.equal(handler(unavailable), undefined);
 });
 test("scratch environment is shared by sandboxed and elevated launch modes", () => {
   const base = {

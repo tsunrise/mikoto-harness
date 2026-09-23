@@ -180,9 +180,9 @@ are added. A tool that requires explicit escalation must describe that trigger
 in its own public schema or tool instructions. Do not advertise unsupported
 arguments on other tools.
 
-Policy's Permissions block owns the effective filesystem **and network**
+Policy's `<permission>` block owns the effective filesystem **and network**
 snapshot, with network enforcement explicitly scoped to sandboxed Garden
-commands. Garden's short execution block refers to that section rather than
+commands. Garden's short `<sandbox>` block refers to that section rather than
 duplicating policy JSON; capability workflows belong in bundled, on-demand
 skills. Describe the live capability endpoint exception symbolically, never
 by injecting its address or bearer token.

@@ -47,7 +47,7 @@ configured lexical tree is likewise dropped and reported.
 `bash` is not enforced in this extension and it should be enforced in other
 extensions.
 
-The extension adds a Permissions section to the system prompt so the agent is
+The extension adds a `<permission>` block to the system prompt so the agent is
 aware of the effective filesystem and network policies.
 
 ## Escalation
