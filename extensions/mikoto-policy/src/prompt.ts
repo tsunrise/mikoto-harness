@@ -4,9 +4,10 @@ import type { MikotoPolicyDocumentLoader } from "./config.ts";
 
 const POLICY_GUIDANCE = `Filesystem: Reads are allowed by default; the most specific allowRead or denyRead match wins, and allowRead wins ties. Writes require allowWrite, and denyWrite always wins.
 
-Network: Access is denied by default; allowedDomains grants matching destinations unless deniedDomains matches. Garden's exact live capability endpoint is the only automatic localhost exception.`;
+Network: Access is denied by default; allowedDomains grants matching destinations unless deniedDomains matches. Garden's exact live capability endpoint is the only automatic localhost exception. The web capability runs host-side behind that endpoint, so web search and page fetches are exempt from network restrictions.`;
 
-const ESCALATION_GUIDANCE = "Each escalation requires manual user action, so repeated requests are disruptive. Keep escalation infrequent by working within the policy whenever possible. Tools without an explicit escalation parameter automatically escalate policy violations.";
+const ESCALATION_GUIDANCE =
+  "Each escalation requires manual user action, so repeated requests are disruptive. Keep escalation infrequent by working within the policy whenever possible. Tools without an explicit escalation parameter automatically escalate policy violations.";
 
 export function installPolicyPrompt(
   loader: MikotoPolicyDocumentLoader,
@@ -26,18 +27,22 @@ export function installPolicyPrompt(
 function renderPolicyPrompt(document: MikotoPolicyDocument): string {
   // Rule order does not affect evaluation. Sort copies so equivalent configs
   // produce identical prompt bytes without mutating the enforcement snapshot.
-  const snapshot = JSON.stringify({
-    filesystem: {
-      denyRead: [...document.filesystem.denyRead].sort(),
-      allowRead: [...document.filesystem.allowRead].sort(),
-      allowWrite: [...document.filesystem.allowWrite].sort(),
-      denyWrite: [...document.filesystem.denyWrite].sort(),
+  const snapshot = JSON.stringify(
+    {
+      filesystem: {
+        denyRead: [...document.filesystem.denyRead].sort(),
+        allowRead: [...document.filesystem.allowRead].sort(),
+        allowWrite: [...document.filesystem.allowWrite].sort(),
+        denyWrite: [...document.filesystem.denyWrite].sort(),
+      },
+      network: {
+        allowedDomains: [...document.network.allowedDomains].sort(),
+        deniedDomains: [...document.network.deniedDomains].sort(),
+      },
     },
-    network: {
-      allowedDomains: [...document.network.allowedDomains].sort(),
-      deniedDomains: [...document.network.deniedDomains].sort(),
-    },
-  }, null, 2)
+    null,
+    2,
+  )
     // JSON escapes preserve the original values when parsed, while ensuring
     // paths and domains cannot introduce XML markup, entities, or invalid characters.
     .replaceAll("&", "\\u0026")

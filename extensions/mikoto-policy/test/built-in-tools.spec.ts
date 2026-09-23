@@ -118,6 +118,8 @@ describe("enforcePiBuiltInTools", () => {
     const denied = [
       ["read", { path: "secrets/file" }],
       ["write", { path: "readonly/file", content: "value" }],
+      ["edit", { path: "secrets/other", edits: [] }],
+      ["edit", { path: "readonly/other", edits: [] }],
     ] as const;
 
     for (const [toolName, input] of denied) {
@@ -168,12 +170,11 @@ describe("enforcePiBuiltInTools", () => {
       ["grep", { path: "secrets" }],
       ["find", { path: "secrets" }],
       ["ls", { path: "secrets" }],
-      ["edit", { path: "secrets/file", edits: [] }],
     ] as const) {
       const result = await call(handler, ctx, toolName, input);
       assert.equal(result?.block, true);
       assert.match(result?.reason ?? "", /denied this tool call/);
-      assert.equal(input.path, toolName === "edit" ? "secrets/file" : "secrets");
+      assert.equal(input.path, "secrets");
     }
     assert.equal(requests.length, 0);
   });

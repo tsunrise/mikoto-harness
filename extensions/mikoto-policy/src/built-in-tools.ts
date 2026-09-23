@@ -23,7 +23,7 @@ const ENFORCED_TOOL_NAMES = new Set([
   "write",
   "edit",
 ]);
-const ESCALATABLE_TOOL_NAMES = new Set(["read", "write"]);
+const ESCALATABLE_TOOL_NAMES = new Set(["read", "write", "edit"]);
 
 export function enforcePiBuiltInTools(
   loader: MikotoPolicyDocumentLoader,
