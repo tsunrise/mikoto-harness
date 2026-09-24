@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { initTheme, type KeybindingsManager } from "@earendil-works/pi-coding-agent";
 import { matchesKey, type KeyId } from "@earendil-works/pi-tui";
 import { ProcessPicker } from "../src/process-picker.ts";
-import { launchSubject, inputSubject } from "../src/permissions.ts";
+import { launchAction, inputAction } from "../src/permissions.ts";
 import { inertText } from "../../mikoto-policy/src/escalate/ui.ts";
 import type { Launch } from "../src/launch.ts";
 import type { Job } from "../src/protocol.ts";
@@ -106,22 +106,18 @@ test("picker failure/expired ID is inert and does not leak executor exception de
   assert.equal(closes, 1, "failed refresh cannot trap the user in detail");
 });
 
-test("approval scope preserves launch settings and inspectable input/control bytes", () => {
-  const launch = { cmd: "printf 'safe\\n'", cwd: "/test", shell: "/bin/sh", login: false, stdin: false } as Launch;
-  const scope = launchSubject(launch).map(inertText);
-  assert.ok(scope.some((line) => line.includes(launch.cmd)));
-  assert.match(scope.join("\n"), /\/bin\/sh -c/);
-  assert.ok(scope.some((line) => line.includes(launch.cwd)));
-  assert.notDeepEqual(launchSubject({ ...launch, stdin: true }).map(inertText), scope);
-  assert.ok(launchSubject({ ...launch, login: true }).join("\n").includes("/bin/sh -lc"));
-  const multilineScope = launchSubject({
-    ...launch,
-    cmd: "\nprintf hi\u001b[31m",
-  }).map(inertText);
-  assert.equal(multilineScope.length, scope.length + 2);
-  assert.ok(multilineScope.some((line) => line.includes("printf hi\\u{1b}[31m")));
-  assert.doesNotMatch(multilineScope.join("\n"), /\\u\{a\}/);
-  const input = inputSubject(job(1), { kind: "write", chars: "line\n" }).map(inertText).join("\n");
-  assert.ok(input.includes(String(Buffer.byteLength("line\n"))));
-  assert.ok(input.includes("line\\u{a}"));
+test("review actions preserve exact inputs without leaking launch secrets", () => {
+  const launch = { cmd: "\nprintf hi\u001b[31m", cwd: "/test", shell: "/bin/sh",
+    login: false, stdin: false, mode: "unsandboxed", capabilities: true,
+    cwdIdentity: "1:2", shellIdentity: "3:4", env: { PATH: "/bin", HOME: "/user", LANG: "C", TERM: "dumb",
+      GARDEN_TOKEN: "private-token", GARDEN_SERVER: "private-endpoint" } } as Launch;
+  const action = launchAction(launch);
+  assert.deepEqual(action.input, { cmd: launch.cmd, cwd: launch.cwd, shell: launch.shell,
+    login: false, stdin: false, mode: "unsandboxed" });
+  assert.doesNotMatch(JSON.stringify(action), /private-token|private-endpoint/);
+  assert.notDeepEqual(launchAction({ ...launch, stdin: true }), action);
+  for (const operation of [{ kind: "write", chars: "line\n" }, { kind: "eof", chars: "" },
+    { kind: "interrupt", chars: "\u0003" }] as const) {
+    assert.deepEqual(inputAction(job(1), operation).input, { session_id: 1, ...operation });
+  }
 });

@@ -1,3 +1,4 @@
+import { DEFAULT_SETTINGS, MikotoPolicyDocumentLoader, type MikotoPolicyLoadResult } from "../src/config.ts";
 import { EventEmitter } from "node:events";
 import type { ExtensionAPI, ExtensionContext, KeybindingsManager, Theme } from "@earendil-works/pi-coding-agent";
 import { matchesKey, type TUI, type KeyId } from "@earendil-works/pi-tui";
@@ -30,13 +31,15 @@ export const tui = { requestRender() {}, terminal: { rows: 18 } } as unknown as 
 export const tick = () => new Promise<void>((resolve) => setImmediate(resolve));
 
 export function request(id = "1", signal = new AbortController().signal): EscalationRequest {
-  return { requestId: id, source: "Test", verb: "Write", subject: `/target/${id}`, why: "Needed", signal };
+  return { requestId: id, source: "Test", action: { toolName: `write-${id}`, input: { path: `/target/${id}` } }, why: "Needed", signal };
 }
 
 export function harness() {
   const bus = new EventEmitter();
   const handlers = new Map<string, Array<(event: unknown, ctx: ExtensionContext) => unknown>>();
   const entries: unknown[] = [];
+  const commands = new Map<string, Parameters<ExtensionAPI["registerCommand"]>[1]>();
+  const notifications: string[] = [];
   const dialogs: EscalationComponent[] = [];
   let interrupted = 0;
   let factoryBarrier: (() => Promise<void>) | undefined;
@@ -50,6 +53,9 @@ export function harness() {
     },
     appendEntry: (_name: string, data: unknown) => { entries.push(structuredClone(data)); },
     registerEntryRenderer() {},
+    registerCommand(name: string, command: Parameters<ExtensionAPI["registerCommand"]>[1]) {
+      commands.set(name, command);
+    },
     on(name: string, handler: (event: unknown, ctx: ExtensionContext) => unknown) {
       handlers.set(name, [...handlers.get(name) ?? [], handler]);
     },
@@ -58,6 +64,7 @@ export function harness() {
     mode: "tui", hasUI: true, cwd: process.cwd(), isProjectTrusted: () => false,
     abort() { interrupted++; },
     ui: {
+      notify(text: string) { notifications.push(text); },
       async custom(factory: Parameters<ExtensionContext["ui"]["custom"]>[0]) {
         await factoryBarrier?.();
         return new Promise((resolve) => {
@@ -70,7 +77,7 @@ export function harness() {
     },
   } as unknown as ExtensionContext;
   return {
-    pi, ctx, bus, entries, dialogs,
+    pi, ctx, bus, entries, dialogs, commands, notifications,
     get interrupted() { return interrupted; },
     delayFactory(barrier: () => Promise<void>) { factoryBarrier = barrier; },
     async emit(name: string) {
@@ -78,3 +85,8 @@ export function harness() {
     },
   };
 }
+
+export const loaded: MikotoPolicyLoadResult = { settings: DEFAULT_SETTINGS,
+  document: { filesystem: { allowRead: [], denyRead: [], allowWrite: [], denyWrite: [] },
+    network: { allowedDomains: [], deniedDomains: [] } }, diagnostics: [], warnings: [] };
+export const loader = new MikotoPolicyDocumentLoader({}, "/missing-test-policy/config.json");

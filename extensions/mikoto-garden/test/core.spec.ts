@@ -19,7 +19,7 @@ import {
   type Launch,
 } from "../src/launch.ts";
 import { classifyInput, EXEC_DEFAULT_YIELD_MS, ExecInput, StdinInput, formatResult } from "../src/tools.ts";
-import { requestEscalation } from "../src/permissions.ts";
+import { authorize, requestEscalation } from "../src/permissions.ts";
 import { OutputStore } from "../src/executor/output-store.ts";
 import { ExecutorClient } from "../src/executor-client.ts";
 import { CONTRACT } from "../src/protocol.ts";
@@ -158,7 +158,7 @@ test("approval callback-then-throw, rejection, missing receiver and cancellation
   const bus = new EventEmitter();
   const events: MikotoEventEmitter = { emit(name: string, data: unknown) { bus.emit(name, data); } };
   const controller = new AbortController();
-  const request = { requestId: "one", source: "test", verb: "test", subject: "exact", why: "test", signal: controller.signal };
+  const request = { requestId: "one", source: "test", action: { toolName: "test", input: "exact" }, why: "test", signal: controller.signal };
   assert.deepEqual(await requestEscalation(events, request), { decision: "reject", cause: "unavailable" });
   bus.on("mikoto-policy:escalate", (event: MikotoPolicyEscalateEvent) => {
     assert.equal(event.claim(), true);
@@ -171,6 +171,26 @@ test("approval callback-then-throw, rejection, missing receiver and cancellation
   const pending = requestEscalation(events, request);
   controller.abort();
   assert.deepEqual(await pending, { decision: "reject", cause: "cancelled" });
+});
+test("ordinary denials preserve reasons without human attribution; failures retain their category", async () => {
+  for (const cause of ["user", "error"] as const) {
+    for (const reason of [undefined, "caller supplied reason"]) {
+      const events: MikotoEventEmitter = {
+        emit(_name: string, data: unknown) {
+          const event = data as MikotoPolicyEscalateEvent;
+          event.claim();
+          event.callback({ decision: "reject", cause, ...(reason ? { reason } : {}) });
+        },
+      };
+      await assert.rejects(authorize(events, "test", { toolName: "test", input: {} }, "why",
+        new AbortController().signal), (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.equal(error.message.includes(`(${cause})`), cause !== "user");
+        if (reason) assert.ok(error.message.includes(reason));
+        return true;
+      });
+    }
+  }
 });
 test("authenticated HTTP schema outputs, errors, routing and disposal", async () => {
   const registry = new CapabilityRegistry();

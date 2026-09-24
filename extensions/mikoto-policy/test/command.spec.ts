@@ -29,6 +29,8 @@ describe("registerViewConfigCommand", () => {
       await writeFile(
         globalConfigPath,
         JSON.stringify({
+          escalation: "auto-review",
+          autoReview: { agent: { provider: "caller-provider", model: "caller-model", thinkingLevel: "high" } },
           filesystem: {
             denyRead: ["global-secret"],
           },
@@ -93,6 +95,9 @@ describe("registerViewConfigCommand", () => {
       assert.ok(notificationText?.includes(globalConfigPath));
       assert.ok(notificationText?.includes(workspaceConfigPath));
       assert.ok(notificationText?.includes(PERMISSION_PATH));
+      for (const value of ["caller-provider", "caller-model", "high", "auto-review"]) {
+        assert.ok(notificationText?.includes(value));
+      }
       assert.ok(
         notificationText?.includes(
           getCanonicalPath(path.join(cwd, "global-secret")),

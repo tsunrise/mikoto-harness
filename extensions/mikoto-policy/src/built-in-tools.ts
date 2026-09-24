@@ -3,6 +3,7 @@ import {
   type ExtensionAPI,
 } from "@earendil-works/pi-coding-agent";
 import type { MikotoEscalationResult } from "mikoto-types";
+import { isDeepStrictEqual } from "node:util";
 import {
   PERMISSION_PATH,
   type MikotoPolicyDocumentLoader,
@@ -39,6 +40,9 @@ export function enforcePiBuiltInTools(
       };
     }
 
+    const assertCurrent = broker.lifetime();
+    const originalInput = structuredClone(event.input) as Record<string, unknown> & { path?: string };
+    const signal = ctx.signal ?? new AbortController().signal;
     const { document: effectivePolicy } = await loader.load(
       ctx.cwd,
       ctx.isProjectTrusted(),
@@ -46,17 +50,17 @@ export function enforcePiBuiltInTools(
 
     let toolPath: string;
     if (isToolCallEventType("read", event)) {
-      toolPath = event.input.path;
+      toolPath = originalInput.path!;
     } else if (isToolCallEventType("grep", event)) {
-      toolPath = event.input.path ?? ".";
+      toolPath = originalInput.path ?? ".";
     } else if (isToolCallEventType("find", event)) {
-      toolPath = event.input.path ?? ".";
+      toolPath = originalInput.path ?? ".";
     } else if (isToolCallEventType("ls", event)) {
-      toolPath = event.input.path ?? ".";
+      toolPath = originalInput.path ?? ".";
     } else if (isToolCallEventType("write", event)) {
-      toolPath = event.input.path;
+      toolPath = originalInput.path!;
     } else if (isToolCallEventType("edit", event)) {
-      toolPath = event.input.path;
+      toolPath = originalInput.path!;
     } else {
       return;
     }
@@ -118,12 +122,14 @@ export function enforcePiBuiltInTools(
     }
 
     if (!decision.allowed) {
-      const signal = ctx.signal ?? new AbortController().signal;
       const result = await broker.request({
         requestId: event.toolCallId,
         source: "Mikoto Policy",
-        verb: event.toolName,
-        subject: canonicalPath,
+        action: {
+          toolName: event.toolName,
+          input: { ...originalInput, path: canonicalPath },
+          context: { cwd: ctx.cwd, access: decision },
+        },
         why: "This operation requires filesystem access denied by the current policy.",
         signal,
       });
@@ -140,6 +146,16 @@ export function enforcePiBuiltInTools(
       }
     }
 
+    try {
+      assertCurrent();
+      signal.throwIfAborted();
+      if (!isDeepStrictEqual(event.input, originalInput) ||
+          getCanonicalPath(resolveToolPath(toolPath, ctx.cwd)) !== canonicalPath ||
+          getCanonicalPath(canonicalPath) !== canonicalPath ||
+          !ownsBuiltInTool(pi, event.toolName)) return changedTargetToolCall();
+    } catch {
+      return changedTargetToolCall();
+    }
     // Pi guarantees tool_call input mutations affect execution. Replacing the
     // lexical argument pins normal execution to the exact path policy checked.
     event.input.path = canonicalPath;
@@ -157,7 +173,7 @@ function deniedToolCall(
   return {
     block: true as const,
     reason: result
-      ? `Mikoto Policy denied this tool call; escalation rejected (${result.cause})${result.reason ? `: ${result.reason}` : "."} See ${PERMISSION_PATH}.`
+      ? `Mikoto Policy denied this tool call; escalation rejected${result.cause === "user" ? "" : ` (${result.cause})`}${result.reason ? `: ${result.reason}` : "."} See ${PERMISSION_PATH}.`
       : `Mikoto Policy denied this tool call. See ${PERMISSION_PATH}.`,
   };
 }

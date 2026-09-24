@@ -9,7 +9,7 @@ import { z } from "zod";
 import type { MikotoEventEmitter } from "mikoto-types";
 import type { Endpoint } from "./capability-server.ts";
 import { prepareLaunch, assertLaunchIdentity } from "./launch.ts";
-import { authorize, inputSubject, launchSubject } from "./permissions.ts";
+import { authorize, inputAction, launchAction } from "./permissions.ts";
 import { JOB_LIMITS, type Delivery, type InputOperation, type Requests } from "./protocol.ts";
 import type { ExecutorClient } from "./executor-client.ts";
 import { boundedText } from "./executor/output-store.ts";
@@ -285,11 +285,7 @@ export function registerGardenTools(
       }
       const launch = await prepareLaunch(input, ctx.cwd, metadata(ctx), endpoint);
       if (launch.mode === "unsandboxed") {
-        update?.({
-          content: [{ type: "text", text: "Awaiting approval for unsandboxed execution" }],
-          details: undefined,
-        });
-        await authorize(events, id, launchSubject(launch), input.justification!, signal);
+        await authorize(events, id, launchAction(launch), input.justification!, signal);
       }
       signal.throwIfAborted();
       if (current() !== runtime || runtime.endpoint() !== endpoint) {
@@ -383,7 +379,7 @@ export function registerGardenTools(
         pending.add(targetLifetime);
         runtime.approvals.set(job.id, pending);
         try {
-          await authorize(events, id, inputSubject(job, operation), input.justification!, signal);
+          await authorize(events, id, inputAction(job, operation), input.justification!, signal);
         } finally {
           pending.delete(targetLifetime);
           if (!pending.size) runtime.approvals.delete(job.id);

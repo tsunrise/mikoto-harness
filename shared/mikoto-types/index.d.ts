@@ -99,6 +99,7 @@ export type MikotoEscalationResult =
   | { readonly decision: "approve" }
   | {
       readonly decision: "reject";
+      /** "user" also includes the user's delegated reviewer or always-deny setting. */
       readonly cause:
         | "user"
         | "interrupted"
@@ -108,16 +109,27 @@ export type MikotoEscalationResult =
         | "busy"
         | "shutdown"
         | "error";
-      /** Present only when the user supplied a rejection reason. */
+      /** User, delegated reviewer, or configured always-deny rejection reason. */
       readonly reason?: string;
     };
+
+/** JSON-only data; numbers must be finite. Disclose all authorization-relevant inputs. */
+export type MikotoReviewValue =
+  | null | boolean | number | string
+  | readonly MikotoReviewValue[]
+  | { readonly [key: string]: MikotoReviewValue };
+
+export type MikotoEscalationAction = Readonly<{
+  toolName: string;
+  input: MikotoReviewValue;
+  context?: MikotoReviewValue;
+}>;
 
 /** Trusted in-process decision service, not an executor or reusable grant. */
 export type MikotoPolicyEscalateEvent = {
   readonly requestId: string;
   readonly source: string;
-  readonly verb: string;
-  readonly subject: string | readonly string[];
+  readonly action: MikotoEscalationAction;
   readonly why: string;
   readonly signal: AbortSignal;
   /**

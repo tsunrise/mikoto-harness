@@ -41,8 +41,10 @@ export function createApplyPatchTool(
       }
       if (signal?.aborted) throw new Error("Operation aborted");
 
-      const prepared = preparePatch(ctx.cwd, params.patch);
-      const assertCurrent = await policy.assertCanWrite(prepared.targets, toolCallId, signal);
+      const patch = params.patch;
+      const cwd = ctx.cwd;
+      const prepared = preparePatch(cwd, patch);
+      const assertCurrent = await policy.assertCanWrite(prepared.targets, { patch, cwd }, toolCallId, signal);
       if (assertCurrent) assertCurrent();
       if (signal?.aborted) throw new Error("Operation aborted");
       const outcome = await applyPatch(prepared, signal);

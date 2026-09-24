@@ -10,8 +10,8 @@ Policy is loaded from these locations, from lowest to highest precedence:
 2. `mikoto-policy.json` in the Pi agent directory.
 3. `mikoto-policy.json` in the trusted workspace root.
 
-Objects are merged recursively. Arrays may either be replaced with a plain
-array or changed with a delta object:
+Filesystem/network fields inherit independently. Arrays may either be replaced
+with a plain array or changed with a delta object:
 
 ```json
 {
@@ -26,7 +26,8 @@ array or changed with a delta object:
 
 A delta adds the values in `+` and removes the values in `-`. Removal wins
 when the same value appears in both. Values of all other types replace the
-value from the previous layer.
+value from the previous layer. Escalation settings use the atomic boundaries
+described below, not recursive agent-object merging.
 
 ## Filesystem
 
@@ -62,7 +63,8 @@ precedence over all allow rules, regardless of specificity.
 
 ## One-time Exceptions
 
-Escalation asks the user to authorize one operation beyond the current policy.
+Escalation authorizes one operation beyond the current policy using the user's
+configured decision strategy.
 Depending on the operation, escalation may happen automatically on a policy
 violation or must be requested explicitly.
 
@@ -70,12 +72,14 @@ Use escalation sparingly. Frequent approval requests interrupt and annoy the
 user. Prefer an already-permitted way to finish the task, but never circumvent
 policy or a user rejection through another tool.
 
-Approval applies only to the specific request shown to the user. A retry or a
+Approval applies only to the exact prepared request. A retry or a
 request with different inputs requires another approval. Approval cannot
 authorize an invalid, unresolved, cancelled, or execution-unsafe request; it
-does not change policy and is never remembered or replayed. Escalation is
-available only in Pi's interactive TUI. If it is unavailable or rejected, the
-operation remains denied.
+does not change policy and is never remembered or replayed. If escalation is
+unavailable or rejected, the operation remains denied. 
+
+User may opt in using a model to review your escalation automatically. The reviewer 
+model would have access to the recent transcript. 
 
 ## Update Policy
 

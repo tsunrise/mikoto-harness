@@ -24,6 +24,9 @@ export function registerViewConfigCommand(
         "Resolved policy:",
         JSON.stringify(loaded.document, null, 2),
         "",
+        "Resolved escalation settings:",
+        JSON.stringify(loaded.settings, null, 2),
+        "",
         "Load diagnostics:",
         JSON.stringify(loaded.diagnostics, null, 2),
       ];

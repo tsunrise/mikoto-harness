@@ -10,8 +10,7 @@ import { installApplyPatchPolicy, requestEscalation } from "../src/policy.ts";
 import { createApplyPatchTool } from "../src/tool.ts";
 
 const request = (signal = new AbortController().signal) => ({
-  requestId: "patch-1", source: "Test", verb: "Apply Patch",
-  subject: ["/a", "/b"], why: "Needed", signal,
+  requestId: "patch-1", source: "Test", action: { toolName: "apply_patch", input: { patch: "test-patch" }, context: { targets: ["/a", "/b"] } }, why: "Needed", signal,
 });
 
 function harness(evaluateWrite?: MikotoPolicy["evaluateWrite"]) {
@@ -100,36 +99,36 @@ describe("whole prepared patch authorization", () => {
       assert.equal(event.claim(), true);
       prompts++;
       assert.deepEqual(h.evaluated, ["/source", "/allowed", "/destination"]);
-      assert.deepEqual(event.subject, ["[denied] /source", "[allowed] /allowed", "[denied] /destination"]);
+      assert.deepEqual(event.action.context, { cwd: "/", targets: [{ path: "/source", allowed: false }, { path: "/allowed", allowed: true }, { path: "/destination", allowed: false }] });
       assert.match(event.why, /current policy/);
       event.callback({ decision: "approve" });
     });
-    await h.guard.assertCanWrite(["/source", "/allowed", "/source", "/destination"], "move");
+    await h.guard.assertCanWrite(["/source", "/allowed", "/source", "/destination"], { patch: "test-patch", cwd: "/" }, "move");
     assert.equal(prompts, 1);
   });
 
   it("does not prompt on allowed targets, or on evaluation errors after a denial", async () => {
     const allowed = harness(async () => ({ allowed: true }));
     allowed.bus.on("mikoto-policy:escalate", () => assert.fail("unexpected prompt"));
-    await allowed.guard.assertCanWrite(["/a"]);
+    await allowed.guard.assertCanWrite(["/a"], { patch: "test-patch", cwd: "/" });
     const error = harness(async (path) => {
       if (path === "/b") throw new Error("evaluation failure");
       return { allowed: false, deniedPath: path };
     });
     error.bus.on("mikoto-policy:escalate", () => assert.fail("unexpected prompt"));
-    await assert.rejects(error.guard.assertCanWrite(["/a", "/b"]), /could not evaluate.*access denied/);
+    await assert.rejects(error.guard.assertCanWrite(["/a", "/b"], { patch: "test-patch", cwd: "/" }), /could not evaluate.*access denied/);
   });
 
   it("denies unavailable brokers after policy discovery and cancels on runtime replacement", async () => {
     const h = harness(async (path) => ({ allowed: false, deniedPath: path }));
-    await assert.rejects(h.guard.assertCanWrite(["/a"]), /unavailable/);
+    await assert.rejects(h.guard.assertCanWrite(["/a"], { patch: "test-patch", cwd: "/" }), /unavailable/);
     let received!: () => void;
     const admitted = new Promise<void>((resolve) => { received = resolve; });
     let pendingEvent: MikotoPolicyEscalateEvent | undefined;
     h.bus.on("mikoto-policy:escalate", (event: MikotoPolicyEscalateEvent) => {
       event.claim(); pendingEvent = event; received();
     });
-    const pending = h.guard.assertCanWrite(["/a"]);
+    const pending = h.guard.assertCanWrite(["/a"], { patch: "test-patch", cwd: "/" });
     await admitted;
     h.handlers.get("session_tree")!();
     pendingEvent!.callback({ decision: "approve" });
@@ -138,7 +137,7 @@ describe("whole prepared patch authorization", () => {
 
   it("returns a lifetime check that prevents commit after authorization settles into a stale runtime", async () => {
     const h = harness(async () => ({ allowed: true }));
-    const assertCurrent = await h.guard.assertCanWrite(["/a"]);
+    const assertCurrent = await h.guard.assertCanWrite(["/a"], { patch: "test-patch", cwd: "/" });
     assert.ok(assertCurrent);
     assertCurrent();
     h.handlers.get("session_shutdown")!();
@@ -160,10 +159,16 @@ describe("whole prepared patch authorization", () => {
       let approve = false;
       h.bus.on("mikoto-policy:escalate", (event: MikotoPolicyEscalateEvent) => {
         event.claim();
-        assert.deepEqual(new Set(event.subject), new Set([`[denied] ${source}`, `[denied] ${destination}`]));
+        assert.deepEqual(event.action.input, { patch: event.requestId === "2" ? patch.replace("-old", "-missing") : patch });
+        assert.deepEqual(event.action.context, { cwd, targets: [destination, source].sort().map((path) => ({ path, allowed: false })) });
         event.callback(approve ? { decision: "approve" } : { decision: "reject", cause: "user", reason: "Keep the original" });
       });
-      await assert.rejects(tool.execute("1", { patch }, undefined, undefined, ctx), /Keep the original/);
+      await assert.rejects(tool.execute("1", { patch }, undefined, undefined, ctx), (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.ok(error.message.includes("Keep the original"));
+        assert.ok(!error.message.includes("(user)"));
+        return true;
+      });
       assert.equal(await readFile(source, "utf8"), "old\n");
       await assert.rejects(access(destination));
       // The invalid hunk must not be inspected against file contents before

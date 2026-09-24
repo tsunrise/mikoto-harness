@@ -13,14 +13,14 @@ export function provideEscalationApi(pi: ExtensionAPI, broker: EscalationBroker)
       let result;
       try {
         result = await broker.request(event);
-      } catch (error) {
-        console.error("Mikoto Policy escalation receiver failed:", error);
+      } catch {
+        console.error("Mikoto Policy escalation: receiver_failed");
         result = reject("error");
       }
       try {
         await event.callback(result);
-      } catch (error) {
-        console.error("Mikoto Policy escalation callback failed:", error);
+      } catch {
+        console.error("Mikoto Policy escalation: callback_failed");
       }
     })();
   });

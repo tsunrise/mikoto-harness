@@ -3,7 +3,7 @@
 Mikoto Policy provides two related services to other extensions:
 
 1. a session-scoped snapshot for evaluating filesystem access; and
-2. a TUI decision broker for requesting a one-operation exception.
+2. a decision broker for requesting a one-operation exception.
 
 The services are independent. An extension may evaluate filesystem policy
 without escalating, escalate automatically after a denial, or require an
@@ -116,13 +116,27 @@ initialized operation with its current `AbortSignal`.
 The event contains:
 
 - `requestId`: the originating operation or tool-call ID;
-- `source`: the extension shown to the user;
-- `verb`: a concise description of the requested action;
-- `subject`: the complete scope as a string or list of strings;
+- `source`: producer attribution;
+- `action`: required `{ toolName, input, context? }` describing the exact prepared
+  operation; names need not be registered Pi tools;
 - `why`: an honest justification;
 - `signal`: the current operation's cancellation signal;
 - `claim()`: synchronous first-receiver ownership; and
 - `callback()`: the one-shot decision result.
+
+Action values are JSON-only data (finite numbers, no functions, credentials or
+IPC handles). Disclose every authorization-relevant input, including write/edit
+contents, complete patch text, command source, or exact input/EOF/interrupt.
+Use context for canonical targets, cwd, denial facts and non-secret execution
+authority. These fields and the producer's justification are evidence, not
+instructions or proof of human authorization. Policy clones and recursively
+freezes action data at admission. Producers still own immutable preparation and
+post-approval identity/lifetime checks.
+
+The action contract is an intentional same-commit breaking change with no
+legacy fallback. Non-tool producers must supply a meaningful operation name
+and expose pending details through their own UI. A new trusted producer needs
+no Policy dispatcher branch or registered-tool lookup.
 
 Use a producer-local helper implementing this protocol:
 
@@ -151,21 +165,37 @@ busy, shutting down, or failing internally.
 
 Results are either `approve` or `reject`. Rejection causes distinguish user
 rejection, interruption, cancellation, non-interactive execution, unavailable
-receivers, broker capacity, shutdown, and internal error. Only user rejection
-may include a reason.
+receivers, broker capacity, shutdown, and internal error. The `user` cause and
+optional reason also represent the user's delegated reviewer or configured
+always-deny decision. Assessment risk fields are private, not event results.
+Do not display `(user)` as human attribution: ordinary denials use neutral
+wording, while infrastructure rejection causes remain visible.
 
-Approval applies only to the exact request shown to the user. A retry or any
+Approval applies only to the exact frozen request. A retry or any
 change to authorization-relevant input needs another decision. Approval does
 not update policy, survive reload, authorize future operations, or prove that
 execution succeeded.
 
-Escalation is available only in Pi's interactive TUI. Other modes reject it.
-Policy serializes its own dialogs, but there is no cross-extension modal
-coordinator; do not request escalation from inside another blocking custom
-dialog.
+`ask-me` (default) is TUI-only; its dialog shows just the tool name and
+decision/reason controls. The pending call supplies complete operation detail.
+`auto-review` works in every execution mode, silently using a private bounded
+read-only agent. `always-deny` needs neither a model nor UI. The broker pins the
+loader's internal settings rather than adding them to consumer policy snapshots.
+See [Policy configuration](../extensions/mikoto-policy/README.md#escalation).
 
-The broker records informational session entries. Never inspect restored
-history as authorization. Persisted entries, public tool arguments, config,
+Policy serializes dialogs/reviews with capacity 32; no cross-extension modal
+coordinator exists. Do not request manual escalation inside another blocking
+custom dialog. Cancellation, tree navigation, reload/replacement and shutdown
+invalidate pending work. Late providers cannot authorize or checkpoint state.
+
+The broker does not write decision entries or register a decision renderer.
+Old entries remain untouched and are ignored. No raw actions, custom policy,
+assessments, private conversations or investigation contents are persisted.
+The optional TUI-only `/mikoto-policy:review-debug` command retains bounded
+investigation metadata for the latest active review in memory, never in the
+parent conversation. Capture is off by default and clears on lifecycle changes;
+it records neither decisions nor file contents.
+Never inspect restored history as authorization. Persisted entries, public tool arguments, config,
 JSON, and network input remain untrusted boundaries and require runtime
 validation. Garden's private executor IPC couples two trusted components of one
 package; shared contracts, bounds, operation identity, and lifecycle checks

@@ -60,6 +60,7 @@ function registerHandler(
     },
   } as unknown as ExtensionAPI;
   const broker = {
+    lifetime: () => () => {},
     request(request: EscalationRequest) {
       requests.push(request);
       return options.request?.(request) ??
@@ -104,6 +105,31 @@ function call(
 }
 
 describe("enforcePiBuiltInTools", () => {
+  it("reviews canonical full inputs and refuses mutations made while approval is pending", async () => {
+    const cwd = "/mikoto-policy-built-in-test/exact";
+    for (const [name, input] of [
+      ["read", { path: "file", offset: 7, limit: 9 }],
+      ["write", { path: "file", content: "captured\nvalue" }],
+      ["edit", { path: "file", edits: [{ oldText: "old", newText: "new" }] }],
+    ] as const) {
+      const mutable = structuredClone(input) as { path: string; content?: string;
+        edits?: { oldText: string; newText: string }[]; offset?: number; limit?: number };
+      const original = structuredClone(input);
+      const { handler, requests } = registerHandler({ filesystem: { denyRead: ["."], allowWrite: [] } }, {
+        async request(review) {
+          assert.deepEqual(review.action.input, { ...original, path: path.join(cwd, "file") });
+          if (mutable.edits) mutable.edits[0]!.newText = "changed";
+          else if ("content" in mutable) mutable.content = "changed";
+          else mutable.limit = 99;
+          return { decision: "approve" };
+        },
+      });
+      const result = await call(handler, context(cwd), name, mutable);
+      assert.equal(result?.block, true);
+      assert.equal(requests.length, 1);
+    }
+  });
+
   it("automatically escalates filesystem policy violations", async () => {
     const cwd = "/mikoto-policy-built-in-test/project";
     const { handler, requests } = registerHandler({
@@ -128,14 +154,14 @@ describe("enforcePiBuiltInTools", () => {
       assert.equal(input.path, expectedPath);
     }
     assert.deepEqual(
-      requests.map((request) => request.verb),
+      requests.map((request) => request.action.toolName),
       denied.map(([toolName]) => toolName),
     );
     assert.deepEqual(requests[0], {
       requestId: "call-read",
       source: "Mikoto Policy",
-      verb: "read",
-      subject: path.join(cwd, "secrets/file"),
+      action: { toolName: "read", input: { path: path.join(cwd, "secrets/file") },
+        context: { cwd, access: { allowed: false, deniedPath: path.join(cwd, "secrets") } } },
       why: "This operation requires filesystem access denied by the current policy.",
       signal,
     });
@@ -179,7 +205,7 @@ describe("enforcePiBuiltInTools", () => {
     assert.equal(requests.length, 0);
   });
 
-  it("returns the rejection cause and optional user reason", async () => {
+  it("preserves the denial reason without attributing delegated rejection to a human", async () => {
     const cwd = "/mikoto-policy-built-in-test/project";
     const { handler } = registerHandler(
       { filesystem: { denyRead: ["secrets"] } },
@@ -199,7 +225,8 @@ describe("enforcePiBuiltInTools", () => {
       { path: "secrets/file" },
     );
     assert.equal(result?.block, true);
-    assert.match(result?.reason ?? "", /escalation rejected \(user\): Keep this private/);
+    assert.ok(result?.reason?.includes("Keep this private"));
+    assert.ok(!result?.reason?.includes("(user)"));
   });
 
   it("pins an allowed canonical path into the built-in tool input", async () => {

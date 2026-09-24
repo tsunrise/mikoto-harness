@@ -8,7 +8,7 @@ import type {
 
 export interface ApplyPatchPolicy {
   /** Returns an invocation-bound lifetime check to repeat just before apply. */
-  assertCanWrite(targets: readonly string[], requestId?: string, signal?: AbortSignal): Promise<(() => void) | void>;
+  assertCanWrite(targets: readonly string[], review: Readonly<{ patch: string; cwd: string }>, requestId?: string, signal?: AbortSignal): Promise<(() => void) | void>;
 }
 
 export function installApplyPatchPolicy(
@@ -39,7 +39,8 @@ export function installApplyPatchPolicy(
   });
 
   return {
-    async assertCanWrite(targets, requestId = "apply_patch", callerSignal) {
+    async assertCanWrite(targets, review, requestId = "apply_patch", callerSignal) {
+      const { patch, cwd } = review;
       const signal = callerSignal
         ? AbortSignal.any([callerSignal, lifetime.signal])
         : lifetime.signal;
@@ -73,14 +74,17 @@ export function installApplyPatchPolicy(
       const result = await requestEscalation(events, {
         requestId,
         source: "Mikoto Apply Patch",
-        verb: "Apply Patch",
-        subject: scope.map((target) => `${denied.has(target) ? "[denied] " : "[allowed] "}${target}`),
+        action: {
+          toolName: "apply_patch",
+          input: { patch },
+          context: { cwd, targets: scope.map((path) => ({ path, allowed: !denied.has(path) })) },
+        },
         why: "This patch needs write access to paths denied by the current policy.",
         signal,
       });
       if (result.decision !== "approve") {
         throw new Error(
-          `Mikoto Policy denied write access to ${[...denied].join(", ")}; escalation rejected (${result.cause})${result.reason ? `: ${result.reason}` : "."} See ${currentPolicy.permissionMdPath}.`,
+          `Mikoto Policy denied write access to ${[...denied].join(", ")}; escalation rejected${result.cause === "user" ? "" : ` (${result.cause})`}${result.reason ? `: ${result.reason}` : "."} See ${currentPolicy.permissionMdPath}.`,
         );
       }
       signal.throwIfAborted();
@@ -127,8 +131,8 @@ export function requestEscalation(
           else finish(result);
         },
       });
-    } catch (error) {
-      console.error("Mikoto Apply Patch escalation delivery failed:", error);
+    } catch {
+      console.error("Mikoto Apply Patch escalation: delivery_failed");
       finish({ decision: "reject", cause: "error" });
     } finally {
       dispatching = false;

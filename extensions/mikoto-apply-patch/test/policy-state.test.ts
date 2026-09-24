@@ -81,7 +81,7 @@ describe("Mikoto Policy integration", () => {
   it("allows execution when no policy provider responds", async () => {
     const harness = policyHarness([]);
     await harness.start();
-    await harness.guard.assertCanWrite(["/outside"]);
+    await harness.guard.assertCanWrite(["/outside"], { patch: "test-patch", cwd: "/" });
   });
 
   it("uses only the first policy callback and deduplicates targets", async () => {
@@ -101,7 +101,7 @@ describe("Mikoto Policy integration", () => {
       "/project/a",
       "/project/a",
       "/project/b",
-    ]);
+    ], { patch: "test-patch", cwd: "/" });
 
     assert.deepEqual(evaluated, ["/project/a", "/project/b"]);
   });
@@ -116,7 +116,7 @@ describe("Mikoto Policy integration", () => {
     await harness.start();
 
     await assert.rejects(
-      harness.guard.assertCanWrite(["/denied"]),
+      harness.guard.assertCanWrite(["/denied"], { patch: "test-patch", cwd: "/" }),
       /denied write access to \/denied.*\/policy\/PERMISSION\.md/,
     );
   });
@@ -130,7 +130,7 @@ describe("Mikoto Policy integration", () => {
     await harness.start();
 
     await assert.rejects(
-      harness.guard.assertCanWrite(["/target"]),
+      harness.guard.assertCanWrite(["/target"], { patch: "test-patch", cwd: "/" }),
       /could not evaluate write access to \/target; access denied/,
     );
   });

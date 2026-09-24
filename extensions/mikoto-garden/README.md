@@ -45,6 +45,16 @@ It translates that snapshot into SRT filesystem and network enforcement;
 explicit host launches and later host mutations use Policy's one-operation
 approval broker.
 
+Policy chooses `ask-me` (default, TUI only), `auto-review` (all modes), or
+`always-deny`. Launch review receives the prepared command, cwd, shell,
+login/stdin flags, authority, PATH and identity facts—not the full environment,
+capability token or live endpoint. Each unsandboxed input/EOF/interrupt gets a
+fresh review containing the managed ID, original command/cwd, stdin state and
+exact operation/characters. Sandboxed launches and output-only polls bypass
+escalation. Post-approval runtime/process/endpoint checks still apply.
+Rejection reasons are returned in normal tool errors, never a separate
+decision-history entry or reviewer display.
+
 On macOS, Garden enables SRT's weaker network isolation so Go programs can
 reach `com.apple.trustd.agent` for TLS certificate verification. Destination
 allow/deny rules still apply to proxied traffic, but trustd access can provide

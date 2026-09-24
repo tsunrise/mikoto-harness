@@ -11,5 +11,14 @@
       "."
     ],
     "denyWrite": []
+  },
+  "escalation": "ask-me",
+  "autoReview": {
+    "agent": {
+      "provider": "openai-codex",
+      "model": "gpt-6-luna",
+      "thinkingLevel": "low"
+    },
+    "policy": ""
   }
 }

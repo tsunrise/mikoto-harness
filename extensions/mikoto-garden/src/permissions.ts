@@ -1,5 +1,6 @@
 import type {
   MikotoEventEmitter,
+  MikotoEscalationAction,
   MikotoEscalationResult,
   MikotoPolicy,
   MikotoPolicyEscalateEvent,
@@ -39,50 +40,42 @@ export function obtainPolicy(events: MikotoEventEmitter): MikotoPolicy | undefin
     return undefined;
   }
 }
-function commandSubject(command: string): readonly string[] {
-  const lines = command.split("\n");
-  if (lines.length === 1) return [`Command: ${command}`];
-  return [
-    "Command (line breaks shown separately):",
-    ...lines.map((line, index) => `Line ${index + 1}: ${line || "(empty)"}`),
-  ];
+export function launchAction(launch: Launch): MikotoEscalationAction {
+  return {
+    toolName: "exec_command",
+    input: { cmd: launch.cmd, cwd: launch.cwd, shell: launch.shell,
+      login: launch.login, stdin: launch.stdin, mode: launch.mode },
+    context: { capabilities: launch.capabilities, cwdIdentity: launch.cwdIdentity,
+      shellIdentity: launch.shellIdentity, PATH: launch.env.PATH,
+      HOME: launch.env.HOME, LANG: launch.env.LANG, TERM: launch.env.TERM,
+      transport: "pipes", proxyEnvironment: "cleared", scratch: "runtime-managed TMPDIR" },
+  };
 }
-export function launchSubject(launch: Launch): readonly string[] {
-  return Object.freeze([
-    ...commandSubject(launch.cmd),
-    `Cwd: ${launch.cwd}`,
-    `Shell: ${launch.shell} ${launch.login ? "-lc" : "-c"}; stdin ${launch.stdin ? "open" : "closed"}`,
-    "Execution uses host authority (unsandboxed)",
-  ]);
-}
-export function inputSubject(job: Job, operation: InputOperation): readonly string[] {
-  return Object.freeze([
-    `Managed session: ${job.id}; UNSANDBOXED`,
-    ...commandSubject(job.cmd),
-    `Cwd: ${job.cwd}`,
-    `Operation: ${operation.kind}`,
-    `Exact UTF-8 input (${Buffer.byteLength(operation.chars)} bytes): ${operation.chars || "(empty)"}`,
-    "Only this input/EOF/interrupt is requested; initial launch approval does not authorize continued interaction.",
-  ]);
+export function inputAction(job: Job, operation: InputOperation): MikotoEscalationAction {
+  return {
+    toolName: "write_stdin",
+    input: { session_id: job.id, kind: operation.kind, chars: operation.chars },
+    context: { cmd: job.cmd, cwd: job.cwd, stdinOpen: job.stdinOpen,
+      state: job.state, mode: job.mode },
+  };
 }
 export async function authorize(
   events: MikotoEventEmitter,
   requestId: string,
-  subject: readonly string[],
+  action: MikotoEscalationAction,
   why: string,
   signal: AbortSignal,
 ): Promise<void> {
   const result = await requestEscalation(events, {
     requestId,
     source: "Mikoto Garden",
-    verb: "Unsandboxed operation",
-    subject,
+    action,
     why,
     signal,
   });
   if (result.decision !== "approve")
     throw new Error(
-      `Garden escalation rejected (${result.cause})${result.reason ? `: ${result.reason}` : ""}. No requested operation was dispatched.`,
+      `Garden escalation rejected${result.cause === "user" ? "" : ` (${result.cause})`}${result.reason ? `: ${result.reason}` : ""}. No requested operation was dispatched.`,
     );
   signal.throwIfAborted();
 }

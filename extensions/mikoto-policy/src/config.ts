@@ -111,6 +111,38 @@ const NetworkConfig = z.strictObject({
   deniedDomains: networkArray(true).optional(),
 });
 
+const AgentName = z.string().min(1).regex(/^\S(?:[\s\S]*\S)?$/,
+  "Provider/model names must be nonblank with no surrounding whitespace.");
+const ReviewAgent = z.strictObject({
+  provider: AgentName,
+  model: AgentName,
+  thinkingLevel: z.enum(["off", "minimal", "low", "medium", "high", "xhigh", "max"]),
+});
+export type EscalationSettings = Readonly<{
+  escalation: "ask-me" | "auto-review" | "always-deny";
+  autoReview: Readonly<{ agent: Readonly<z.infer<typeof ReviewAgent>>; policy: string }>;
+}>;
+export const DEFAULT_SETTINGS: EscalationSettings = Object.freeze({
+  escalation: "ask-me",
+  autoReview: Object.freeze({
+    agent: Object.freeze({ provider: "openai-codex", model: "gpt-6-luna", thinkingLevel: "low" }),
+    policy: "",
+  }),
+});
+
+export function mergeSettings(layers: readonly MikotoPolicyConfig[]): EscalationSettings {
+  let { escalation, autoReview: { agent, policy } } = DEFAULT_SETTINGS;
+  for (const layer of layers) {
+    escalation = layer.escalation ?? escalation;
+    agent = layer.autoReview?.agent ?? agent;
+    policy = layer.autoReview?.policy ?? policy;
+  }
+  return Object.freeze({
+    escalation,
+    autoReview: Object.freeze({ agent: Object.freeze({ ...agent }), policy }),
+  });
+}
+
 export const MikotoPolicyConfig = z
   .strictObject({
     $schema: z
@@ -119,6 +151,11 @@ export const MikotoPolicyConfig = z
       .describe("Optional JSON Schema URI."),
     filesystem: FilesystemConfig.optional(),
     network: NetworkConfig.optional(),
+    escalation: z.enum(["ask-me", "auto-review", "always-deny"]).optional(),
+    autoReview: z.strictObject({
+      agent: ReviewAgent.optional(),
+      policy: z.string().optional(),
+    }).optional(),
   })
   .meta({
     title: "Mikoto Policy",
@@ -129,6 +166,7 @@ export const MikotoPolicyConfig = z
 export type MikotoPolicyConfig = z.infer<typeof MikotoPolicyConfig>;
 
 export type MikotoPolicyLoadResult = {
+  readonly settings: EscalationSettings;
   readonly document: MikotoPolicyDocument;
   readonly warnings: readonly string[];
   readonly diagnostics: readonly MikotoPolicyLoadDiagnostic[];
@@ -266,6 +304,7 @@ export class MikotoPolicyDocumentLoader {
     );
     warnings.push(...resolvedPolicy.warnings);
     const result = Object.freeze({
+      settings: mergeSettings(layers),
       document: resolvedPolicy.document,
       warnings: Object.freeze(warnings),
       diagnostics: Object.freeze([...diagnostics, ...resolvedPolicy.diagnostics].map((d) => Object.freeze(d))),

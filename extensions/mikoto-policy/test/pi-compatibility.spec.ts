@@ -10,7 +10,7 @@ import {
   type CreateAgentSessionOptions,
 } from "@earendil-works/pi-coding-agent";
 
-it("Pi 0.85.1: built-in interception preserves tool state and schemas; SDK conflicts fail closed", async () => {
+it("Pi 0.87.1: built-in interception preserves tool state and schemas; SDK conflicts fail closed", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "mikoto-pi-compat-"));
   const agentDir = join(cwd, "agent");
   await mkdir(agentDir);

@@ -1,11 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { stripVTControlCharacters as stripAnsi } from "node:util";
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { MikotoEscalationResult } from "mikoto-types";
 import { visibleWidth, CURSOR_MARKER } from "@earendil-works/pi-tui";
-import { EscalationComponent, inertText, registerDecisionRenderer } from "../src/escalate/ui.ts";
-import { keys, request, theme, tui } from "./escalation-fixtures.ts";
+import { EscalationComponent, inertText } from "../src/escalate/ui.ts";
+import { keys, theme, tui } from "./escalation-fixtures.ts";
 
 describe("escalation UI", () => {
   it("frames the dialog in the purple message palette, highlights Reject, and keeps both states within bounds", () => {
@@ -22,16 +21,13 @@ describe("escalation UI", () => {
       inverse: (text: string) => `\x1b[7m${text}\x1b[27m`,
     } as unknown as typeof theme;
     const terminal = { rows: 18 };
-    const component = new EscalationComponent({
-      ...request(), verb: "Apply Patch", subject: "[denied] /Users/tom/hello.txt",
-      why: "This patch needs write access to paths denied by the current policy.",
-    }, { ...tui, terminal } as typeof tui, styledTheme, keys(), () => {});
+    const component = new EscalationComponent("synthetic_tool", { ...tui, terminal } as typeof tui, styledTheme, keys(), () => {});
     component.focused = true;
     const lines = component.render(160);
     const text = lines.map(stripAnsi).join("\n");
     assert.match(text, /\n╭─+╮\n/);
     assert.match(text, /╰─+╯$/);
-    assert.ok(text.includes("/Users/tom/hello.txt"));
+    assert.ok(text.includes("synthetic_tool"));
     // All border rows have the same width even in terminals that render the
     // torii in one cell. The emoji is confined to the standalone title.
     assert.ok(lines.slice(1).every((line) => visibleWidth(line) === 104));
@@ -69,7 +65,7 @@ describe("escalation UI", () => {
 
   it("uses configured actions, ignores printable approval and chunked paste, propagates IME focus", () => {
     const results: MikotoEscalationResult[] = [];
-    const component = new EscalationComponent(request(), tui, theme,
+    const component = new EscalationComponent("synthetic_tool", tui, theme,
       keys({ "tui.select.confirm": ["ctrl+y"] }), (result) => results.push(result));
     component.focused = true;
     component.handleInput("y");
@@ -87,18 +83,16 @@ describe("escalation UI", () => {
     component.handleInput("\r"); // Submit an empty reason.
     assert.deepEqual(results, [{ decision: "reject", cause: "user" }]);
 
-    const printable = new EscalationComponent(request(), tui, theme,
+    const printable = new EscalationComponent("synthetic_tool", tui, theme,
       keys({ "tui.select.confirm": ["y"] }), (result) => results.push(result));
     printable.handleInput("\x1b[D");
     printable.handleInput("y");
     assert.equal(results.length, 1);
   });
 
-  it("returns from the reason view without deciding, preserving draft, selection, scroll and focus", () => {
+  it("returns from the reason view without deciding, preserving draft, selection and focus", () => {
     const results: MikotoEscalationResult[] = [];
-    const component = new EscalationComponent({
-      ...request(), subject: Array.from({ length: 40 }, (_, i) => `/target/${i}`),
-    }, tui, theme, keys({ "tui.select.cancel": ["ctrl+x"] }), (result) => results.push(result));
+    const component = new EscalationComponent("synthetic_tool", tui, theme, keys({ "tui.select.cancel": ["ctrl+x"] }), (result) => results.push(result));
     component.focused = true;
     component.render(80);
     component.handleInput("\x1b[6~");
@@ -120,59 +114,17 @@ describe("escalation UI", () => {
     assert.equal(results.length, 1);
   });
 
-  it("scrolls the whole scope, escapes terminal/invisible text and respects narrow widths", () => {
-    const subject = Array.from({ length: 50 }, (_, i) => `/path/${i}/${"x".repeat(100)}`);
-    subject.push("\x1b]52;c;secrets\x07\u202e\u200b");
-    const component = new EscalationComponent({ ...request(), subject }, tui, theme, keys(), () => {});
-    const seen = new Set<string>();
-    for (let i = 0; i < 100; i++) {
-      for (const line of component.render(40)) seen.add(line);
-      component.handleInput("\x1b[6~");
-    }
-    assert.ok([...seen].some((line) => line.includes("/path/49/")));
-    assert.ok([...seen].some((line) => line.includes("\\u{1b}]52")));
-    assert.ok([...seen].every((line) => !/[\x1b\x07\u202e\u200b]/u.test(stripAnsi(line))));
+  it("escapes tool names, truncates long names, and ignores scope navigation", () => {
+    const component = new EscalationComponent("odd\x1b]52;c;secret\x07\u202e", tui, theme, keys(), () => {});
+    const before = component.render(80);
+    assert.ok(before.join("\n").includes("\\u{1b}]52"));
+    assert.doesNotMatch(before.join("\n"), /[\x1b\x07\u202e]/);
+    component.handleInput("\x1b[6~");
+    assert.deepEqual(component.render(80), before);
+    const long = new EscalationComponent("wide界".repeat(200), tui, theme, keys(), () => {});
     for (const width of [1, 2, 4, 12, 80]) {
-      component.invalidate();
-      assert.ok(component.render(width).every((line) => visibleWidth(line) <= width));
+      assert.ok(long.render(width).every((line) => visibleWidth(line) <= width));
     }
     assert.equal(inertText("\r\n\t"), "\\u{d}\\u{a}\\u{9}");
-  });
-
-  it("renders validated history only as inert, informational data", () => {
-    let renderer: Parameters<ExtensionAPI["registerEntryRenderer"]>[1] | undefined;
-    registerDecisionRenderer({
-      registerEntryRenderer(_type: string, fn: NonNullable<typeof renderer>) { renderer = fn; },
-    } as ExtensionAPI);
-    assert.ok(renderer);
-    const colors: string[] = [];
-    const historyTheme = {
-      ...theme,
-      fg(color: string, text: string) { colors.push(color); return text; },
-    } as unknown as typeof theme;
-    const render = (data: unknown, expanded: boolean) =>
-      renderer!({ data } as never, { expanded } as never, historyTheme)!.render(60).join("\n");
-    const invalid = render({ version: 99 }, false);
-    assert.ok(invalid.trim());
-    const data = { version: 1, source: "test", requestId: "1", verb: "Apply Patch",
-      subject: ["/a", "/b\x1b[31m"], why: "Needed", result: { decision: "approve" } };
-    const approved = render(data, false);
-    assert.ok(approved.includes(data.verb));
-    assert.notEqual(approved, invalid);
-    assert.equal(render(data, true), approved);
-    assert.ok(!render(data, true).includes("/a"));
-    const rejected = { ...data, result: { decision: "reject", cause: "user", reason: "Keep it private" } };
-    const rejection = render(rejected, false);
-    assert.ok(rejection.includes(data.verb));
-    assert.notEqual(rejection, approved);
-    assert.equal(render(rejected, true), rejection);
-    assert.ok(!render(rejected, true).includes("Keep it private"));
-    const unavailable = { ...data, result: { decision: "reject", cause: "unavailable" } };
-    const failure = render(unavailable, false);
-    assert.ok(failure.includes(data.verb));
-    assert.notEqual(failure, rejection);
-    assert.ok(!failure.includes("/b"));
-    assert.doesNotMatch([approved, rejection, failure].join("\n"), /\x1b/);
-    assert.deepEqual(new Set(colors), new Set(["customMessageLabel", "muted"]));
   });
 });

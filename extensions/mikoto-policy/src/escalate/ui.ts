@@ -1,13 +1,9 @@
 import type { ExtensionAPI, ExtensionContext, KeybindingsManager, Theme } from "@earendil-works/pi-coding-agent";
 import {
-  Input, Text, matchesKey, parseKey, truncateToWidth, visibleWidth, wrapTextWithAnsi,
+  Input, matchesKey, parseKey, truncateToWidth, visibleWidth, wrapTextWithAnsi,
   type Component, type Focusable, type TUI,
 } from "@earendil-works/pi-tui";
 import type { MikotoEscalationResult, MikotoEventEmitter } from "mikoto-types";
-import { z } from "zod";
-import type { EscalationRequest } from "./broker.ts";
-
-export const DECISION_ENTRY = "mikoto-policy:escalation-decision";
 
 /** Escape, rather than remove, characters that could disguise the scope. */
 export function inertText(text: string): string {
@@ -16,28 +12,15 @@ export function inertText(text: string): string {
 }
 
 const display = (text: string) => text === "" ? "(empty)" : inertText(text);
-function wrapScope(text: string, width: number): string[] {
-  // Even a one-column terminal can inspect wide path characters via escapes;
-  // truncating two-column glyphs would silently lose part of the scope.
-  const fitted = width === 1 ? Array.from(text, (char) =>
-    visibleWidth(char) > 1 ? `\\u{${char.codePointAt(0)!.toString(16)}}` : char).join("") : text;
-  return wrapTextWithAnsi(fitted, width);
-}
-const subjects = (request: Pick<EscalationRequest, "subject">) =>
-  typeof request.subject === "string" ? [request.subject] : request.subject;
-
 export class EscalationComponent implements Component, Focusable {
   private selected: "approve" | "reject" = "reject";
   private state: "decision" | "reason" = "decision";
   private readonly input = new Input();
-  private scroll = 0;
-  private maxScroll = 0;
-  private pageSize = 1;
   private inPaste = false;
   private _focused = false;
   private completed = false;
   private visible = false;
-  private readonly request: EscalationRequest;
+  private readonly toolName: string;
   private readonly tui: Pick<TUI, "requestRender" | "terminal">;
   private readonly theme: Theme;
   private readonly keys: KeybindingsManager;
@@ -45,14 +28,14 @@ export class EscalationComponent implements Component, Focusable {
   private readonly onVisible: () => void;
 
   constructor(
-    request: EscalationRequest,
+    toolName: string,
     tui: Pick<TUI, "requestRender" | "terminal">,
     theme: Theme,
     keys: KeybindingsManager,
     done: (result: MikotoEscalationResult) => void,
     onVisible: () => void = () => {},
   ) {
-    this.request = request;
+    this.toolName = toolName;
     this.tui = tui;
     this.theme = theme;
     this.keys = keys;
@@ -84,8 +67,8 @@ export class EscalationComponent implements Component, Focusable {
     if (!paste && (this.keys.matches(data, "tui.select.cancel") ||
         this.keys.matches(data, "app.interrupt") || matchesKey(data, "escape"))) {
       if (this.state === "reason") {
-        // Going back is navigation, not a decision. Keep the draft and scroll
-        // position, and keep our place in the broker queue until submission.
+        // Going back is navigation, not a decision. Keep the draft and our place
+        // in the broker queue until submission.
         this.state = "decision";
         this.focused = this._focused;
       } else {
@@ -114,14 +97,6 @@ export class EscalationComponent implements Component, Focusable {
         this.selected = "approve";
       } else if (matchesKey(data, "right")) {
         this.selected = "reject";
-      } else if (this.keys.matches(data, "tui.select.up")) {
-        this.scroll = Math.max(0, this.scroll - 1);
-      } else if (this.keys.matches(data, "tui.select.down")) {
-        this.scroll = Math.min(this.maxScroll, this.scroll + 1);
-      } else if (this.keys.matches(data, "tui.select.pageUp")) {
-        this.scroll = Math.max(0, this.scroll - this.pageSize);
-      } else if (this.keys.matches(data, "tui.select.pageDown")) {
-        this.scroll = Math.min(this.maxScroll, this.scroll + this.pageSize);
       }
     }
     this.tui.requestRender();
@@ -143,7 +118,7 @@ export class EscalationComponent implements Component, Focusable {
     // emoji-width differences must not move the frame's right-hand corners.
     const title = `⛩️  ${violet(th.bold("Escalation"))}`;
     // A readable card is nicer than stretching a rule across an ultrawide
-    // terminal. On small terminals, give the space back to the actual scope.
+    // terminal. On small terminals, give the space back to the tool name.
     const framed = width >= 44 && this.tui.terminal.rows >= 12;
     const panelWidth = Math.min(width, 104);
     const innerWidth = framed ? panelWidth - 6 : panelWidth;
@@ -181,18 +156,6 @@ export class EscalationComponent implements Component, Focusable {
       ));
     }
 
-    // Wrap plain, escaped caller text before styling it. Indentation belongs
-    // outside the wrap width so even long paths remain completely inspectable.
-    const indent = innerWidth >= 12 ? "  " : "";
-    const detail = (text: string) => wrapScope(text, innerWidth - indent.length)
-      .map((line) => indent + th.fg("text", line));
-    const scope = [
-      ...wrapScope(display(this.request.verb), innerWidth).map((line) => violet(th.bold(line))),
-      ...(subjects(this.request).length ? subjects(this.request).map(display) : ["(empty scope)"]).flatMap(detail),
-      "",
-      ...wrapScope("Why this needs approval", innerWidth).map((line) => muted(th.italic(line))),
-      ...detail(display(this.request.why)),
-    ];
     const choice = (value: "approve" | "reject", label: string) =>
       this.selected === value
         ? violet(th.inverse(th.bold(` › ${label} `)))
@@ -206,19 +169,7 @@ export class EscalationComponent implements Component, Focusable {
         hint(this.keys.getKeys("tui.select.confirm").join("/"), "confirm") +
         separator + hint("Esc", "interrupt")),
     ];
-    // Reserve space for the complete frame, controls, and a scroll indicator,
-    // plus Pi's own footer. Decoration must not push the decision off-screen.
-    const overhead = (framed ? 4 : 1) + footer.length + 1;
-    this.pageSize = Math.max(1, this.tui.terminal.rows - overhead - 3);
-    this.maxScroll = Math.max(0, scope.length - this.pageSize);
-    this.scroll = Math.min(this.scroll, this.maxScroll);
-    return panel([
-      ...scope.slice(this.scroll, this.scroll + this.pageSize),
-      ...(this.maxScroll > 0 ? [
-        muted(`Scope ${this.scroll + 1}–${Math.min(scope.length, this.scroll + this.pageSize)}/${scope.length}`) +
-          separator + hint("↑↓ / PgUp/PgDn", "scroll"),
-      ] : []),
-    ], footer);
+    return panel([th.fg("text", fit(display(this.toolName)))], footer);
   }
 
   invalidate(): void { this.input.invalidate(); }
@@ -227,7 +178,7 @@ export class EscalationComponent implements Component, Focusable {
 export async function showEscalation(
   pi: ExtensionAPI,
   ctx: ExtensionContext,
-  request: EscalationRequest,
+  toolName: string,
   signal: AbortSignal,
 ): Promise<MikotoEscalationResult> {
   let close: ((result: MikotoEscalationResult) => void) | undefined;
@@ -238,7 +189,7 @@ export async function showEscalation(
     if (signal.aborted) return cancelled;
     const result = await ctx.ui.custom<MikotoEscalationResult>((tui, theme, keys, done) => {
       close = done;
-      const component = new EscalationComponent(request, tui, theme, keys, done, () => {
+      const component = new EscalationComponent(toolName, tui, theme, keys, done, () => {
         if (!signal.aborted) {
           const events: MikotoEventEmitter = pi.events;
           try {
@@ -258,63 +209,4 @@ export async function showEscalation(
     signal.removeEventListener("abort", abort);
     close = undefined;
   }
-}
-
-// Unlike the trusted bus, restored session entries are an untrusted boundary.
-const decisionSchema = z.object({
-  version: z.literal(1),
-  source: z.string(),
-  requestId: z.string(),
-  verb: z.string(),
-  subject: z.union([z.string(), z.array(z.string())]),
-  why: z.string(),
-  result: z.discriminatedUnion("decision", [
-    z.object({ decision: z.literal("approve") }).strict(),
-    z.object({
-      decision: z.literal("reject"),
-      cause: z.enum(["user", "interrupted", "cancelled", "non_interactive", "unavailable", "busy", "shutdown", "error"]),
-      reason: z.string().optional(),
-    }).strict(),
-  ]),
-}).strict();
-
-export function registerDecisionRenderer(pi: ExtensionAPI): void {
-  pi.registerEntryRenderer(DECISION_ENTRY, (entry, _options, theme) => {
-    const parsed = decisionSchema.safeParse(entry.data);
-    if (!parsed.success) return new Text("Mikoto Policy: invalid decision record", 0, 0);
-    const data = parsed.data;
-    const verb = display(data.verb);
-    return {
-      render(width) {
-        if (width <= 0) return [];
-        if (data.result.decision === "approve") {
-          return wrapScope(`⛩️  Approved by User: ${verb}`, width)
-            .map((line) => theme.fg("customMessageLabel", truncateToWidth(line, width)));
-        }
-        const lines = data.result.cause === "user"
-          ? [`Rejected by User: ${verb}`]
-          : [
-              `Rejected due to issues: ${verb}`,
-              rejectionIssue(data.result.cause),
-            ];
-        return lines.flatMap((line) => wrapScope(line, width))
-          .map((line) => theme.fg("muted", truncateToWidth(line, width)));
-      },
-      invalidate() {},
-    };
-  });
-}
-
-function rejectionIssue(
-  cause: Exclude<Extract<MikotoEscalationResult, { decision: "reject" }>["cause"], "user">,
-): string {
-  return {
-    interrupted: "Approval was interrupted.",
-    cancelled: "The operation was cancelled.",
-    non_interactive: "Interactive approval was unavailable.",
-    unavailable: "The approval service was unavailable.",
-    busy: "The approval queue was full.",
-    shutdown: "The session was shutting down.",
-    error: "An internal escalation error occurred.",
-  }[cause];
 }

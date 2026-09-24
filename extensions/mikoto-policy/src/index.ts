@@ -16,7 +16,7 @@ export default async function mikotoPolicy(pi: ExtensionAPI): Promise<void> {
     JSON.parse(await readFile(BUNDLED_POLICY_PATH, "utf8")),
   );
   const loader = new MikotoPolicyDocumentLoader(bundledConfig);
-  const broker = installEscalation(pi);
+  const broker = installEscalation(pi, loader);
   installPolicyPrompt(loader, pi);
   enforcePiBuiltInTools(loader, broker, pi);
   provideExtensionsApi(loader, pi);

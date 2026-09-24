@@ -26,18 +26,20 @@
     "validate": "npm run check:schema && npm run check && npm test"
   },
   "peerDependencies": {
-    "@earendil-works/pi-coding-agent": ">=0.85.1",
-    "@earendil-works/pi-tui": ">=0.85.1"
+    "@earendil-works/pi-coding-agent": ">=0.87.1",
+    "@earendil-works/pi-tui": ">=0.87.1",
+    "@earendil-works/pi-ai": ">=0.87.1"
   },
   "dependencies": {
     "zod": "^4.0.0"
   },
   "devDependencies": {
-    "@earendil-works/pi-coding-agent": "0.85.1",
+    "@earendil-works/pi-coding-agent": "0.87.1",
     "@types/node": "^24.0.0",
     "mikoto-types": "^0.1.0",
     "typescript": "^5.9.0",
-    "@earendil-works/pi-tui": "0.85.1"
+    "@earendil-works/pi-tui": "0.87.1",
+    "@earendil-works/pi-ai": "0.87.1"
   },
   "pi": {
     "extensions": [

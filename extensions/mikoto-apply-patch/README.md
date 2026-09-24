@@ -40,6 +40,13 @@ rules:
   whole patch is rejected without changing files.
 
 Escalation adds no fields or directives to the raw patch grammar.
+Policy receives the exact captured patch string, cwd and all prepared canonical
+targets with their access decisions. Authorization precedes content reads and
+planning; execution consumes the same opaque single-use prepared object.
+The configured Policy strategy chooses manual TUI approval, private automatic
+review in any mode, or immediate denial. Rejection reasons remain ordinary
+tool errors, with no separate decision history/display. This requires the
+same-commit structured-action contract from `mikoto-types`.
 
 Symlink paths are checked against the location they actually point to. A
 symlink inside an allowed workspace therefore cannot grant access to a target
