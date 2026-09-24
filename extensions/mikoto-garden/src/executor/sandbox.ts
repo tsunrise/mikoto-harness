@@ -44,6 +44,9 @@ export class Sandbox {
             allowAllUnixSockets: false,
             allowLocalBinding: false,
           },
+          // Go's macOS TLS verification needs trustd.agent. This widens the
+          // Mach service boundary, not the destination policy enforced below.
+          enableWeakerNetworkIsolation: true,
         },
         async ({ host, port }) =>
           typeof port === "number" &&

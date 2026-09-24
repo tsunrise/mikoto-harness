@@ -45,6 +45,12 @@ It translates that snapshot into SRT filesystem and network enforcement;
 explicit host launches and later host mutations use Policy's one-operation
 approval broker.
 
+On macOS, Garden enables SRT's weaker network isolation so Go programs can
+reach `com.apple.trustd.agent` for TLS certificate verification. Destination
+allow/deny rules still apply to proxied traffic, but trustd access can provide
+a separate data-exfiltration path. Use Garden only with workloads trusted for
+that additional access.
+
 Each session also attempts to create an authenticated loopback HTTP endpoint.
 Its address and bearer token are exposed only to that session's commands as
 `GARDEN_SERVER` and `GARDEN_TOKEN`. Garden accepts narrow routes from other
