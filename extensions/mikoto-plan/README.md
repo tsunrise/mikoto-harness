@@ -37,12 +37,15 @@ The session's absolute `ctx.cwd`, captured when entering Plan mode, defines
 The extension appends messages in following format when entering/exitting plan mode. 
 
   ```text
-  <developer_message>
   <collaboration_mode>
   ...instructions and delimited workspace path data...
   </collaboration_mode>
-  </developer_message>
   ```
+
+The prompts in `prompts/` are model neutral: they say the message comes from
+the harness and describe the user's choice of mode as context, without
+referring to a message role, because the same text is delivered as a
+developer, system, or user message depending on the model.
 
 The session stores it as a custom message directly after the user prompt
 that triggered the switch, so the session tree shows the order the model

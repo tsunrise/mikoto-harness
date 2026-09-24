@@ -292,7 +292,7 @@ test("actual prompts persist each transition immediately after its triggering us
     const messages = context.messages.slice(-2);
     assert.deepEqual(messages.map((message: any) => message.role), ["user", "system"]);
     assert.equal(messages[0].content[0].text, text);
-    assert.match(messages[1].content, /^<developer_message>/);
+    assert.match(messages[1].content, /^<collaboration_mode>/);
   }
   for (const [request, text] of [[f.requests[0], "research"], [f.requests[1], "implement"]] as const) {
     const mode = modeItems(request).at(-1);
@@ -307,7 +307,7 @@ test("actual prompts persist each transition immediately after its triggering us
 
 test("only valid instruction metadata infers mode; legacy extras, summary prose, and user tags do not", () => {
   const sm = SessionManager.inMemory(cwd);
-  sm.appendCustomMessageEntry("other-context", '<developer_message>Enter Plan Mode</developer_message>', false);
+  sm.appendCustomMessageEntry("other-context", '<collaboration_mode>\nEnter Plan Mode</collaboration_mode>', false);
   sm.branchWithSummary(sm.getLeafId()!, "Plan mode is active");
   sm.appendCustomMessageEntry(INSTRUCTION_TYPE, "invalid", true, {
     version: 1, mode: "plan", transitionId: "invalid", placement: "before-user",

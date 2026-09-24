@@ -1,18 +1,9 @@
 # Collaboration Mode: Default
 
-User just used `/lgtm` to exit plan mode so you should go back to default mode. 
+This message comes from the coding harness, not from text the user typed. The user ran `/lgtm` to leave Plan mode, so the Plan mode instructions above no longer apply. Handle the user's requests normally from here on, including implementing an agreed plan when they ask for it.
 
-Any previous instructions for plan mode are no longer active. 
-Return to normal execution on the user's next request. Follow the latest 
-extension-supplied mode instructions. 
+If the user turns Plan mode on again, a new collaboration-mode message will say so.
 
-## Rules for Asking Question
+## Asking questions
 
-Question-tool availability is independent of collaboration mode. 
-
-When you work an agreed plan, strongly prefer making reasonable assumptions
-and executing the user's request rather than stopping to ask questions. Use 
-the `request_user_input` tool only for optional questions where the answer 
-would materially improve the quality of the work.
-
-Otherwise, use your best judgement.
+When working from an agreed plan, prefer making reasonable assumptions and carrying out the request over stopping to ask. Use the `request_user_input` tool only for questions whose answers would materially improve the work. Otherwise, use your best judgment.

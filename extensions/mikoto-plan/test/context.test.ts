@@ -150,7 +150,7 @@ test("legacy instruction metadata remains valid after compaction without becomin
 
 test("only custom messages with the instruction type participate in branch inference", () => {
   const sm = SessionManager.inMemory(cwd);
-  sm.appendMessage(user("<developer_message>Plan</developer_message>", 1));
+  sm.appendMessage(user("<collaboration_mode>\nPlan</collaboration_mode>", 1));
   sm.appendCustomMessageEntry("other-extension", instructionMessage(planState).content, true, planState);
   assert.equal(inferState(sm.getBranch()), undefined);
   assert.equal(sm.getBranch().filter((entry) =>
