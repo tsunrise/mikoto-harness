@@ -35,6 +35,13 @@ and the remaining live smoke-test checklist.
 ```bash
 npm install
 
+# Build every package that has a build step (e.g. mikoto-apply-patch's
+# native addon, mikoto-garden's compiled output):
+npm run build
+
+# Build one package:
+npm run build -w mikoto-garden
+
 # Validate one package without running the entire workspace:
 npm run validate -w mikoto-sound
 

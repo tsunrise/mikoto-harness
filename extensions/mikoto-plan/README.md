@@ -1,8 +1,8 @@
 # Mikoto Plan
 
 Conversational planning with a Markdown file as the deliverable, followed by
-an explicit return to ordinary execution. Requires Pi's extension hooks;
-automated API tests are pinned to **Pi 0.85.1**.
+an explicit return to ordinary execution. Requires **Pi 0.87.1** or later;
+automated API tests are pinned to Pi 0.87.1.
 
 ## Load alongside Mikoto Question
 
@@ -44,10 +44,26 @@ The extension appends messages in following format when entering/exitting plan m
   </developer_message>
   ```
 
-For `openai-codex-responses` and `openai-responses` with `compat.supportsDeveloperRole = true`, this message is sent using `developer` role.
+The session stores it as a custom message directly after the user prompt
+that triggered the switch, so the session tree shows the order the model
+receives. On each request, models with
+`compat.supportsMidConvoSystemMessages = true` receive it as a native Pi
+system message, which the provider adapter serializes:
 
-Other transports (and developer-role-disabled Responses backends) receive the
-same wrapped body as a **user** message. 
+| API | Wire form |
+| --- | --- |
+| `openai-responses`, `openai-codex-responses` | `developer` item after the prompt |
+| `anthropic-messages` | `role: "system"` message after the prompt's user turn ([placement rules](https://platform.claude.com/docs/en/build-with-claude/mid-conversation-system-messages)) |
+
+Pi's built-in catalog sets the flag for GPT-5.6 and GPT-6 on the OpenAI API
+and Codex, and for Claude Opus 5, Opus 5.5, Fable 5, and Fable 5.1 on the
+Anthropic API. Set it in `models.json` for custom providers that accept
+mid-conversation system messages.
+
+Other models (for example Claude Sonnet 5, which Anthropic does not support
+for this feature) receive the same wrapped body as a **user** message. Pi
+would otherwise fold later system messages into the leading system prompt,
+invalidating the prompt cache on every mode switch.
 
 ## Validation
 

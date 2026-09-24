@@ -19,12 +19,14 @@ test("instruction rendering adds exactly one canonical wrapper pair in either mo
 
 test("workspace path data stays absolute, safely delimited, and independent of nested repository/editor paths", async (t) => {
   const f = await fixture({
-    before: [(pi) => pi.on("before_agent_start", () => ({
-      message: {
-        customType: "zed-context", display: false,
-        content: `<zed-context>${cwd}/nested-repo/src/file.ts</zed-context>`,
-      },
-    }))],
+    before: [(pi) => {
+      pi.on("before_agent_start", () => ({
+        message: {
+          customType: "other-context", display: false,
+          content: `<other-context>${cwd}/nested-repo/src/file.ts</other-context>`,
+        },
+      }));
+    }],
   });
   t.after(() => f.session.dispose());
   await f.prompt("/plan research");

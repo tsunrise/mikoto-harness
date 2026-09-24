@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
-import { cancelledPayload, ResponsesDelivery, supportsNativeDelivery } from "./delivery.ts";
+import { supportsNativeDelivery, toNativeInstructions } from "./delivery.ts";
 import { instructionMessage } from "./prompts.ts";
 import { inferState, INSTRUCTION_TYPE, isInstruction, type InstructionDetails, type Mode, type PlanState } from "./state.ts";
 
@@ -9,7 +9,6 @@ export default function mikotoPlan(pi: ExtensionAPI): void {
   let desiredMode: Mode = "default";
   let workspaceRoot: string;
   let warnedMissingQuestion = false;
-  let delivery: ResponsesDelivery | undefined;
 
   function notify(ctx: ExtensionContext, text: string, level: "warning" | "error"): void {
     if (ctx.hasUI) ctx.ui.notify(text, level);
@@ -63,19 +62,10 @@ export default function mikotoPlan(pi: ExtensionAPI): void {
   pi.on("session_start", (_event, ctx) => {
     desiredMode = "default";
     workspaceRoot = resolve(ctx.cwd);
-    delivery = undefined;
-  });
-  pi.on("session_tree", () => {
-    // Navigation changes the branch-inferred mode, not the user's selection.
-    delivery = undefined;
   });
   pi.on("session_shutdown", () => {
-    delivery = undefined;
     desiredMode = "default";
   });
-  pi.on("model_select", () => { delivery = undefined; });
-  pi.on("session_before_tree", () => { delivery = undefined; });
-  pi.on("agent_end", () => { delivery = undefined; });
 
   pi.on("before_agent_start", (_event, ctx) => {
     const sent = inferState(ctx.sessionManager.getBranch());
@@ -84,38 +74,18 @@ export default function mikotoPlan(pi: ExtensionAPI): void {
       version: 1, mode: desiredMode,
       workspaceRoot: desiredMode === "plan" ? workspaceRoot : sent?.workspaceRoot ?? workspaceRoot,
     };
-    // For `/plan prompt`, the command handler called sendUserMessage() first.
-    // However, Pi has only validated the prompt and built its user message in a
-    // local array when before_agent_start runs; it has not appended that message
-    // to the branch yet. Because the session is idle, sending without triggering
-    // another turn appends this instruction now. Pi then starts the agent run and
-    // appends the pending user message, giving us instruction -> user ordering.
-    pi.sendMessage(instructionMessage(state), { triggerTurn: false });
+    // Pi persists this message right after the triggering user message, so the
+    // session tree shows the same user -> instruction order that providers get.
+    const { customType, content, display, details } = instructionMessage(state);
+    return { message: { customType, content, display, details } };
   });
 
-  pi.on("context", (event, ctx) => {
-    // TODO: If more extensions need developer-role delivery, move this
-    // provider-specific carrier conversion into a shared extension with a
-    // narrow event-bus contract. It should promote only explicitly registered
-    // and acknowledged custom message types, rather than allowing arbitrary
-    // messages to claim the higher-trust developer role.
-    delivery = supportsNativeDelivery(ctx.model) ? new ResponsesDelivery() : undefined;
-    if (delivery) return { messages: delivery.prepare(event.messages) };
-  });
-
-  pi.on("before_provider_request", (event, ctx) => {
-    const currentDelivery = delivery;
-    // A carrier map belongs to exactly one context/provider handoff. Clearing
-    // it here prevents unrelated requests from observing stale carrier state.
-    delivery = undefined;
-    if (!currentDelivery) return;
-    try {
-      return currentDelivery.rewrite(event.payload);
-    } catch (error) {
-      const reason = `Mikoto Plan: native instruction delivery failed; run aborted. ${error instanceof Error ? error.message : String(error)}`;
-      ctx.abort();
-      notify(ctx, reason, "error");
-      return cancelledPayload(reason);
-    }
+  // `context_with_system` runs after every `context` handler, so other
+  // extensions still see the instruction as a custom message. Only this
+  // extension's typed instruction messages are converted; arbitrary messages
+  // cannot claim the higher-trust system role.
+  pi.on("context_with_system", (event, ctx) => {
+    if (!supportsNativeDelivery(ctx.model) || !event.messages.some(isInstruction)) return;
+    return { messages: toNativeInstructions(event.messages) };
   });
 }

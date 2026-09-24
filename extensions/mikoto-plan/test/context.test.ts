@@ -7,9 +7,15 @@ import {
   entryMessage, INSTRUCTION_TYPE, inferState, isInstruction,
   type Instruction, type PlanState,
 } from "../src/state.ts";
-import { cwd, fixture, modeItems, sse } from "./fixtures.ts";
+import { cwd, fixture, itemText, lastPrompt, modeItems, sse } from "./fixtures.ts";
 
 const planState: PlanState = { version: 1, mode: "plan", workspaceRoot: cwd };
+
+/** The instruction is the last item, directly after the prompt that triggered it. */
+function assertFollowsPrompt(payload: any, mode: any, prompt: string): void {
+  assert.equal(payload.input.at(-1), mode);
+  assert.equal(itemText(payload.input.at(-2)), prompt);
+}
 const user = (text: string, timestamp: number): UserMessage => ({ role: "user", content: text, timestamp });
 
 function appendInstruction(sm: SessionManager, state: PlanState): string {
@@ -48,9 +54,9 @@ test("compaction loss does not replay a same-mode instruction; a later switch ap
 
   await f.prompt("/lgtm implement");
   assert.equal(modeItems(f.requests[1]).length, 1);
-  assert.match(modeItems(f.requests[1])[0].content[0].text, /# Collaboration Mode: Default/);
-  assert.equal(f.requests[1].input.at(-1).content[0].text, "implement");
-  assert.equal(f.requests[1].input.at(-2), modeItems(f.requests[1])[0]);
+  assert.match(itemText(modeItems(f.requests[1])[0])!, /# Collaboration Mode: Default/);
+  assert.equal(lastPrompt(f.requests[1]), "implement");
+  assertFollowsPrompt(f.requests[1], modeItems(f.requests[1])[0], "implement");
   assert.equal(instructions(sm).length, 2);
   assert.equal(inferState(sm.getBranch())?.mode, "default");
   assert.equal(f.errors.length, 0);
@@ -63,9 +69,9 @@ test("startup Default switches a compacted Plan branch without first replaying P
 
   await f.prompt("ordinary work");
   assert.equal(modeItems(f.requests[0]).length, 1);
-  assert.match(modeItems(f.requests[0])[0].content[0].text, /# Collaboration Mode: Default/);
-  assert.equal(f.requests[0].input.at(-1).content[0].text, "ordinary work");
-  assert.equal(f.requests[0].input.at(-2), modeItems(f.requests[0])[0]);
+  assert.match(itemText(modeItems(f.requests[0])[0])!, /# Collaboration Mode: Default/);
+  assert.equal(lastPrompt(f.requests[0]), "ordinary work");
+  assertFollowsPrompt(f.requests[0], modeItems(f.requests[0])[0], "ordinary work");
   assert.deepEqual(instructions(sm).map((message) => message.details.mode), ["plan", "default"]);
 });
 
@@ -95,8 +101,7 @@ test("real compaction neither injects mode into summarization nor appends recove
   const summaryRequest = f.requests.at(-1);
   assert.ok(summaryRequest);
   assert.equal(modeItems(summaryRequest).length, 0);
-  assert.ok(!JSON.stringify(summaryRequest).includes("mikoto-plan-carrier:"));
-  assert.notEqual(summaryRequest.instructions, f.session.agent.state.systemPrompt);
+  assert.notEqual(summaryRequest.instructions, f.session.systemPrompt);
   assert.equal(instructions(f.sm).length, persistedBefore);
 
   await f.prompt("revise the document");
@@ -120,7 +125,7 @@ test("pending mode selection affects only the post-compaction prompt mismatch", 
 
   await f.prompt("execute");
   assert.deepEqual(instructions(f.sm).map((message) => message.details.mode), ["plan", "default"]);
-  assert.equal(modeItems(f.requests.at(-1)).at(-1).content[0].text.includes("# Collaboration Mode: Default"), true);
+  assert.match(itemText(modeItems(f.requests.at(-1)).at(-1))!, /# Collaboration Mode: Default/);
 });
 
 test("legacy instruction metadata remains valid after compaction without becoming recovery state", async (t) => {

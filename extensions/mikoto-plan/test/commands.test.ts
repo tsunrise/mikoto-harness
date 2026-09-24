@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { stripVTControlCharacters as stripAnsi } from "node:util";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
-import { fixture, cwd, modeItems } from "./fixtures.ts";
+import { fixture, cwd, itemText, lastPrompt, modeItems } from "./fixtures.ts";
 import { instructionMessage } from "../src/prompts.ts";
 import {
   entryMessage, INSTRUCTION_TYPE, inferState, isInstruction,
@@ -43,7 +43,7 @@ test("all command forms, ordinary Plan input, setters, whitespace, and literal s
   assert.equal(f.requests.length, 3);
   assert.equal(f.notifications.length, noticesBeforePlanPrompt);
   assert.equal(inferState(f.sm.getBranch())?.mode, "plan");
-  assert.equal(f.requests[2].input.at(-1).content[0].text, "/lgtm do not dispatch this");
+  assert.equal(lastPrompt(f.requests[2]), "/lgtm do not dispatch this");
   const beforeExit = structuredClone(f.sm.getBranch());
   await f.prompt("/lgtm");
   assert.equal(f.requests.length, 3);
@@ -55,8 +55,8 @@ test("all command forms, ordinary Plan input, setters, whitespace, and literal s
   assert.equal(f.requests.length, 4);
   assert.equal(f.notifications.length, noticesBeforeDefaultPrompt);
   assert.equal(modeItems(f.requests[3]).length, 2);
-  assert.match(modeItems(f.requests[3])[1].content[0].text, /Default/);
-  assert.equal(f.requests[3].input.at(-1).content[0].text, "implement now");
+  assert.match(itemText(modeItems(f.requests[3])[1])!, /Default/);
+  assert.equal(lastPrompt(f.requests[3]), "implement now");
   assert.equal(instructions(f.sm).length, 2);
   assert.equal(inferState(f.sm.getBranch())?.mode, "default");
   assert.deepEqual(f.pi.getActiveTools(), tools);
@@ -108,7 +108,7 @@ test("opposite bare setters cancel each other without instructions or history en
   await f.prompt("/plan new task");
   assert.equal(f.requests.length, 2);
   assert.equal(modeItems(f.requests[1]).length, 1);
-  assert.equal(f.requests[1].input.at(-1).content[0].text, "new task");
+  assert.equal(lastPrompt(f.requests[1]), "new task");
   const branch = structuredClone(f.sm.getBranch());
   await f.prompt("/lgtm");
   await f.prompt("/plan");
@@ -123,10 +123,12 @@ test("busy commands reject instead of queuing mode changes or prompts", async (t
   let started!: () => void;
   const ready = new Promise<void>((resolve) => { started = resolve; });
   const gate = new Promise<void>((resolve) => { release = resolve; });
-  const f = await fixture({ after: [(pi) => pi.on("before_provider_request", async () => {
-    started();
-    await gate;
-  })] });
+  const f = await fixture({ after: [(pi) => {
+    pi.on("before_provider_request", async () => {
+      started();
+      await gate;
+    });
+  }] });
   t.after(() => f.session.dispose());
   await f.prompt("/plan");
   f.notifications.length = 0;
@@ -269,7 +271,7 @@ test("history renders each instruction as one blue event without exposing its me
   assert.equal(f.statuses.size, 0);
 });
 
-test("actual prompts persist each transition immediately before its triggering user message", async (t) => {
+test("actual prompts persist each transition immediately after its triggering user message", async (t) => {
   const f = await fixture();
   t.after(() => f.session.dispose());
   await f.prompt("/plan research");
@@ -278,22 +280,25 @@ test("actual prompts persist each transition immediately before its triggering u
   const indexes = branch.flatMap((entry, index) =>
     entry.type === "custom_message" && entry.customType === INSTRUCTION_TYPE ? [index] : []);
   assert.equal(indexes.length, 2);
+  // Pi's initial system message is recorded first, so it never sits between.
+  assert.ok(indexes[0] > branch.findIndex((entry) => entry.type === "message" && entry.message.role === "system"));
   for (const [index, text] of [[indexes[0], "research"], [indexes[1], "implement"]] as const) {
-    const next = branch[index + 1];
-    assert.equal(next?.type, "message");
-    assert.ok(next?.type === "message" && next.message.role === "user");
-    assert.equal((next.message.content as { type: string; text: string }[])[0].text, text);
+    const previous = branch[index - 1];
+    assert.ok(previous?.type === "message" && previous.message.role === "user");
+    assert.equal((previous.message.content as { type: string; text: string }[])[0].text, text);
   }
   for (const [context, text] of [[f.providerContexts[0], "research"], [f.providerContexts[1], "implement"]] as const) {
+    assert.equal(context.messages[0].role, "system");
     const messages = context.messages.slice(-2);
-    assert.deepEqual(messages.map((message: any) => message.role), ["user", "user"]);
-    assert.match(messages[0].content[0].text, /^mikoto-plan-carrier:/);
-    assert.equal(messages[1].content[0].text, text);
+    assert.deepEqual(messages.map((message: any) => message.role), ["user", "system"]);
+    assert.equal(messages[0].content[0].text, text);
+    assert.match(messages[1].content, /^<developer_message>/);
   }
   for (const [request, text] of [[f.requests[0], "research"], [f.requests[1], "implement"]] as const) {
     const mode = modeItems(request).at(-1);
     assert.equal(mode.role, "developer");
-    assert.equal(request.input[request.input.indexOf(mode) + 1].content[0].text, text);
+    assert.equal(request.input.at(-1), mode);
+    assert.equal(request.input.at(-2).content[0].text, text);
   }
   assert.equal(instructions(f.sm).length, 2);
   assert.equal(inferState(f.sm.getBranch())?.mode, "default");
@@ -302,7 +307,7 @@ test("actual prompts persist each transition immediately before its triggering u
 
 test("only valid instruction metadata infers mode; legacy extras, summary prose, and user tags do not", () => {
   const sm = SessionManager.inMemory(cwd);
-  sm.appendCustomMessageEntry("zed-context", '<developer_message>Enter Plan Mode</developer_message>', false);
+  sm.appendCustomMessageEntry("other-context", '<developer_message>Enter Plan Mode</developer_message>', false);
   sm.branchWithSummary(sm.getLeafId()!, "Plan mode is active");
   sm.appendCustomMessageEntry(INSTRUCTION_TYPE, "invalid", true, {
     version: 1, mode: "plan", transitionId: "invalid", placement: "before-user",
