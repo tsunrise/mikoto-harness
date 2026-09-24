@@ -59,6 +59,13 @@ export function inputAction(job: Job, operation: InputOperation): MikotoEscalati
       state: job.state, mode: job.mode },
   };
 }
+export function stopAction(job: Job): MikotoEscalationAction {
+  return {
+    toolName: "stop_command",
+    input: { session_id: job.id, signals: "SIGTERM, then SIGKILL" },
+    context: { cmd: job.cmd, cwd: job.cwd, state: job.state, mode: job.mode },
+  };
+}
 export async function authorize(
   events: MikotoEventEmitter,
   requestId: string,

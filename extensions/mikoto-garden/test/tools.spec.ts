@@ -4,13 +4,18 @@ import type { AgentToolUpdateCallback, ExtensionAPI, ExtensionContext, ToolDefin
 import type { Delivery, Job, Requests } from "../src/protocol.ts";
 import { registerGardenTools, type ToolRuntime } from "../src/tools.ts";
 
-function fixture(onRequest: (method: keyof Requests) => void = () => {}) {
+type FixtureOptions = {
+  job?: Partial<Job>;
+  jobs?: Job[];
+  emit?: (name: string, event: unknown) => void;
+};
+function fixture(onRequest: (method: keyof Requests) => void = () => {}, options: FixtureOptions = {}) {
   const tools = new Map<string, ToolDefinition>();
   const requests: { method: keyof Requests; data: unknown; timeout?: number }[] = [];
   const job: Job = {
     id: 123, mode: "sandboxed", state: "running", cmd: "/bin/cat",
     cwd: process.cwd(), started: 0, disclosed: true, stdinOpen: true,
-    exit_code: null, exit_signal: null, unread: 0,
+    exit_code: null, exit_signal: null, unread: 0, ...options.job,
   };
   const delivery: Delivery = {
     job: { ...job, state: "exited", exit_code: 0, stdinOpen: false },
@@ -24,7 +29,7 @@ function fixture(onRequest: (method: keyof Requests) => void = () => {}) {
       async request(method: keyof Requests, data: unknown, timeout?: number) {
         requests.push({ method, data, timeout });
         onRequest(method);
-        if (method === "list") return { jobs: [job] };
+        if (method === "list") return { jobs: options.jobs ?? [job] };
         if (method === "spawn" || method === "input") return delivery;
         if (method === "preflight" || method === "ack" || method === "cancel" || method === "stop") return null;
         assert.fail(`Unexpected request: ${method}`);
@@ -33,7 +38,9 @@ function fixture(onRequest: (method: keyof Requests) => void = () => {}) {
   };
   const pi = {
     registerTool: (tool: ToolDefinition) => tools.set(tool.name, tool),
-    events: { emit: () => assert.fail("Sandboxed operations must not request approval") },
+    events: {
+      emit: options.emit ?? (() => assert.fail("Sandboxed operations must not request approval")),
+    },
   } as unknown as ExtensionAPI;
   const ctx = {
     cwd: process.cwd(), thinkingLevel: "off",
@@ -69,7 +76,7 @@ const waitArgument = (value: number | undefined) =>
 
 test("model-facing tool metadata uses product-neutral wording", () => {
   const { tools } = fixture();
-  for (const name of ["exec_command", "write_stdin"]) {
+  for (const name of ["exec_command", "write_stdin", "list_commands", "stop_command"]) {
     const tool = tools.get(name)!;
     const modelMetadata = JSON.stringify({
       description: tool.description,
@@ -182,4 +189,95 @@ test("both tools release failed handoffs and ACK log retention before reporting 
     assert.deepEqual(accepted.requests.at(-1)?.data, { id: 123, chunk: "fixture", preserveLog: true });
     assert.deepEqual(accepted.collected, [123]);
   }
+});
+
+type EscalateEvent = {
+  action: { toolName: string; input: Record<string, unknown> };
+  claim(): boolean;
+  callback(result: { decision: "approve" | "reject"; cause?: string }): void;
+};
+const broker = (decision: "approve" | "reject", seen: EscalateEvent[] = []) =>
+  (name: string, event: unknown) => {
+    assert.equal(name, "mikoto-policy:escalate");
+    const escalation = event as EscalateEvent;
+    seen.push(escalation);
+    assert.equal(escalation.claim(), true);
+    escalation.callback(decision === "approve" ? { decision } : { decision, cause: "user" });
+  };
+
+test("stop_command stops a live sandboxed command and collects its final output without approval", async () => {
+  const h = fixture();
+  const result = await h.execute("stop_command", { session_id: 123 });
+  assert.deepEqual(h.requests.map(({ method }) => method), ["list", "stop", "input", "ack"]);
+  assert.deepEqual(h.requests[1].data, { id: 123 });
+  const collect = h.requests[2].data as Requests["input"];
+  assert.deepEqual(collect.operation, { kind: "poll", chars: "" });
+  assert.equal(collect.wait, 1_000);
+  assert.equal((result.details as Delivery).output, "done");
+  assert.deepEqual(h.collected, [123]);
+});
+
+test("stop_command collects an already-finished command without signalling or approval", async () => {
+  for (const job of [
+    { state: "exited" as const, exit_code: 0 },
+    { state: "exited" as const, exit_code: 0, mode: "unsandboxed" as const },
+  ]) {
+    const h = fixture(undefined, { job });
+    const args = job.mode ? { session_id: 123, justification: "clean up" } : { session_id: 123 };
+    await h.execute("stop_command", args);
+    assert.deepEqual(h.requests.map(({ method }) => method), ["list", "input", "ack"]);
+  }
+});
+
+test("stop_command requires approval to stop a live unsandboxed command", async () => {
+  const seen: EscalateEvent[] = [];
+  const approved = fixture(undefined, { job: { mode: "unsandboxed" }, emit: broker("approve", seen) });
+  await approved.execute("stop_command", { session_id: 123, justification: "hung login" });
+  assert.equal(seen.length, 1);
+  assert.equal(seen[0].action.toolName, "stop_command");
+  assert.equal(seen[0].action.input.session_id, 123);
+  assert.deepEqual(approved.requests.map(({ method }) => method), ["list", "stop", "input", "ack"]);
+
+  const rejected = fixture(undefined, { job: { mode: "unsandboxed" }, emit: broker("reject") });
+  await assert.rejects(
+    rejected.execute("stop_command", { session_id: 123, justification: "hung login" }),
+    /rejected/,
+  );
+  assert.deepEqual(rejected.requests.map(({ method }) => method), ["list"]);
+});
+
+test("stop_command rejects a justification mismatch before signalling", async () => {
+  for (const [job, args] of [
+    [{}, { session_id: 123, justification: "not needed" }],
+    [{ mode: "unsandboxed" as const }, { session_id: 123 }],
+  ] as const) {
+    const h = fixture(undefined, { job });
+    await assert.rejects(h.execute("stop_command", args), /Justification/);
+    assert.deepEqual(h.requests.map(({ method }) => method), ["list"]);
+  }
+});
+
+test("list_commands reports one row per command whose session ID was returned", async () => {
+  const base: Job = {
+    id: 0, mode: "sandboxed", state: "running", cmd: "sleep 1\nsleep 2",
+    cwd: process.cwd(), started: 0, disclosed: true, stdinOpen: false,
+    exit_code: null, exit_signal: null, unread: 0,
+  };
+  const jobs: Job[] = [
+    { ...base, id: 111111 },
+    { ...base, id: 222222, disclosed: false },
+    { ...base, id: 333333, state: "exited", exit_code: 1, ended: 5 },
+  ];
+  const h = fixture(undefined, { jobs });
+  const result = await h.execute("list_commands", {});
+  assert.deepEqual(h.requests.map(({ method }) => method), ["list"]);
+  assert.deepEqual((result.details as { jobs: Job[] }).jobs.map(({ id }) => id), [111111, 333333]);
+  const text = (result.content[0] as { text: string }).text;
+  assert.equal(text.split("\n").length, 2);
+  assert.match(text, /\b111111\b/);
+  assert.match(text, /\b333333\b/);
+  assert.doesNotMatch(text, /\b222222\b/);
+
+  const empty = fixture(undefined, { jobs: [] });
+  assert.deepEqual(((await empty.execute("list_commands", {})).details as { jobs: Job[] }).jobs, []);
 });

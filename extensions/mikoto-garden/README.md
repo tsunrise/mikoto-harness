@@ -34,6 +34,12 @@ pi -e extensions/mikoto-policy -e extensions/mikoto-garden
   returns a session ID when the command remains active.
 - `write_stdin` waits for or collects output and can send input, EOF, or an
   interrupt to a managed command.
+- `list_commands` lists running or uncollected managed commands so the agent
+  can recover session IDs.
+- `stop_command` terminates a managed command's process group (SIGTERM, then
+  SIGKILL) and returns its final unread output. The agent does not need to
+  send a literal Ctrl-C character. Stopping an unsandboxed command requires a
+  justification and a fresh approval, like other unsandboxed mutations.
 
 The current tool descriptions, parameter schemas, wait bounds, and validation
 rules are defined in `src/tools.ts`.
@@ -50,7 +56,8 @@ Policy chooses `ask-me` (default, TUI only), `auto-review` (all modes), or
 login/stdin flags, authority, PATH and identity facts—not the full environment,
 capability token or live endpoint. Each unsandboxed input/EOF/interrupt gets a
 fresh review containing the managed ID, original command/cwd, stdin state and
-exact operation/characters. Sandboxed launches and output-only polls bypass
+exact operation/characters; so does each agent `stop_command` on a live
+unsandboxed command. Sandboxed launches and output-only polls bypass
 escalation. Post-approval runtime/process/endpoint checks still apply.
 Rejection reasons are returned in normal tool errors, never a separate
 decision-history entry or reviewer display.

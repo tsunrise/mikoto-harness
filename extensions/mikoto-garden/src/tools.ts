@@ -9,8 +9,14 @@ import { z } from "zod";
 import type { MikotoEventEmitter } from "mikoto-types";
 import type { Endpoint } from "./capability-server.ts";
 import { prepareLaunch, assertLaunchIdentity } from "./launch.ts";
-import { authorize, inputAction, launchAction } from "./permissions.ts";
-import { JOB_LIMITS, type Delivery, type InputOperation, type Requests } from "./protocol.ts";
+import { authorize, inputAction, launchAction, stopAction } from "./permissions.ts";
+import {
+  JOB_LIMITS,
+  type Delivery,
+  type InputOperation,
+  type Job,
+  type Requests,
+} from "./protocol.ts";
 import type { ExecutorClient } from "./executor-client.ts";
 import { boundedText } from "./executor/output-store.ts";
 import { gardenRenderers } from "./ui.ts";
@@ -26,6 +32,10 @@ const MAX_EXEC_WAIT_MS = 30_000;
 const MAX_POLL_WAIT_MS = 300_000;
 const MIN_INPUT_WAIT_MS = 250;
 const MAX_INPUT_WAIT_MS = 30_000;
+// After stop has signalled the process group, collect its final output. The
+// wait returns as soon as the process is reaped.
+const STOP_COLLECT_WAIT_MS = 1_000;
+const LIST_COMMAND_CHARS = 200;
 export const EXEC_DEFAULT_YIELD_MS = MIN_POLL_WAIT_MS;
 export const ExecInput = z
   .strictObject({
@@ -70,6 +80,33 @@ export const StdinInput = z.strictObject({
   justification: reason.optional(),
 });
 export type StdinInput = z.infer<typeof StdinInput>;
+export const StopInput = z.strictObject({
+  session_id: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+  max_output_tokens: integer.optional(),
+  justification: reason.optional(),
+});
+export type StopInput = z.infer<typeof StopInput>;
+const ListInput = z.strictObject({});
+const isLive = (job: Job) => job.state === "running" || job.state === "stopping";
+export function formatJobList(jobs: Job[], now = Date.now()): string {
+  const visible = [...jobs].sort((a, b) => Number(isLive(b)) - Number(isLive(a)) || a.started - b.started);
+  if (!visible.length) return "No managed commands.";
+  return visible
+    .map((job) => {
+      let state: string = job.state;
+      if (job.exit_signal && job.exit_code === null) state = `terminated by ${job.exit_signal}`;
+      else if (job.exit_code !== null) state = `exited with code ${job.exit_code}`;
+      const elapsed = (((job.ended ?? now) - job.started) / 1000).toFixed(1);
+      const oneLine = job.cmd.replace(/\s+/g, " ").trim();
+      const chars = Array.from(oneLine);
+      const cmd =
+        chars.length > LIST_COMMAND_CHARS
+          ? `${chars.slice(0, LIST_COMMAND_CHARS).join("")}…`
+          : oneLine;
+      return `${job.id} · ${job.mode} · ${state} · ${elapsed}s · ${job.unread} unread bytes · ${cmd}`;
+    })
+    .join("\n");
+}
 export function classifyInput(input: StdinInput): InputOperation {
   const chars = input.chars ?? "";
   if (chars === "\u0003") {
@@ -217,6 +254,26 @@ export function registerGardenTools(
     }
   }
   const events: MikotoEventEmitter = pi.events;
+  async function authorizeJob(
+    runtime: ToolRuntime,
+    toolCallId: string,
+    job: Job,
+    action: Parameters<typeof authorize>[2],
+    why: string,
+    signal: AbortSignal,
+    target: AbortController,
+  ): Promise<void> {
+    // Register the pending approval so a process exit or a user stop cancels it.
+    const pending = runtime.approvals.get(job.id) ?? new Set<AbortController>();
+    pending.add(target);
+    runtime.approvals.set(job.id, pending);
+    try {
+      await authorize(events, toolCallId, action, why, signal);
+    } finally {
+      pending.delete(target);
+      if (!pending.size) runtime.approvals.delete(job.id);
+    }
+  }
   pi.registerTool({
     name: "exec_command",
     label: "Execute Command",
@@ -319,7 +376,7 @@ export function registerGardenTools(
     name: "write_stdin",
     label: "Manage Command",
     description:
-      "Wait for a managed command and collect unread output without sending input (omit chars), or deliver UTF-8 pipe input/EOF. Returned output is consumed; /ps previews are not. Exact Ctrl-C interrupts. Unsandboxed mutations require fresh approval; output-only waits do not.",
+      "Wait for a managed command and collect unread output without sending input (omit chars), or deliver UTF-8 pipe input/EOF. Returned output is consumed; /ps previews are not. Exact Ctrl-C interrupts; use stop_command to terminate a command. Unsandboxed mutations require fresh approval; output-only waits do not.",
     promptSnippet: "Poll or send pipe input/EOF/interrupt to a managed command",
     parameters: Type.Object(
       {
@@ -375,15 +432,15 @@ export function registerGardenTools(
         throw new Error("stdin is closed; launch with stdin: true");
       }
       if (elevated) {
-        const pending = runtime.approvals.get(job.id) ?? new Set<AbortController>();
-        pending.add(targetLifetime);
-        runtime.approvals.set(job.id, pending);
-        try {
-          await authorize(events, id, inputAction(job, operation), input.justification!, signal);
-        } finally {
-          pending.delete(targetLifetime);
-          if (!pending.size) runtime.approvals.delete(job.id);
-        }
+        await authorizeJob(
+          runtime,
+          id,
+          job,
+          inputAction(job, operation),
+          input.justification!,
+          signal,
+          targetLifetime,
+        );
       }
       signal.throwIfAborted();
       if (current() !== runtime) throw new Error("Command runtime generation changed");
@@ -403,6 +460,98 @@ export function registerGardenTools(
         },
         signal,
         elevated,
+        update,
+      );
+    },
+  });
+  pi.registerTool({
+    name: "list_commands",
+    label: "List Commands",
+    description:
+      "List managed commands that are still running or have uncollected output, with session ID, sandbox mode, state, elapsed time, unread output bytes, and command.",
+    promptSnippet: "List running or uncollected managed commands and their session IDs",
+    parameters: Type.Object({}, { additionalProperties: false }),
+    async execute(_id, raw, callerSignal) {
+      parse(ListInput, raw ?? {});
+      const runtime = current();
+      const signal = AbortSignal.any([
+        runtime.lifetime.signal,
+        ...(callerSignal ? [callerSignal] : []),
+      ]);
+      const { jobs } = await runtime.client.request("list", {}, 10000, signal);
+      // Undisclosed jobs belong to exec_command calls that have not returned
+      // yet; their IDs were never given to the model.
+      const visible = jobs.filter((job) => job.disclosed);
+      return {
+        content: [{ type: "text" as const, text: formatJobList(visible) }],
+        details: { jobs: visible },
+      };
+    },
+  });
+  pi.registerTool({
+    name: "stop_command",
+    label: "Stop Command",
+    description:
+      "Terminate a managed command and its process group (SIGTERM, then SIGKILL), then return its final unread output. Use for hung commands or commands no longer needed. A command that already exited is collected without signalling. Stopping an unsandboxed command requires fresh approval.",
+    promptSnippet: "Terminate a hung or unneeded managed command and collect its final output",
+    parameters: Type.Object(
+      {
+        session_id: Type.Integer({ minimum: 1, description: "Managed ID, never an OS PID" }),
+        max_output_tokens: Type.Optional(Type.Integer({ minimum: 0 })),
+        justification: Type.Optional(
+          Type.String({
+            description: "Required only when the command runs unsandboxed",
+          }),
+        ),
+      },
+      { additionalProperties: false },
+    ),
+    ...gardenRenderers("stop"),
+    async execute(id, raw, callerSignal, update) {
+      const input = parse(StopInput, raw);
+      const runtime = current();
+      const targetLifetime = new AbortController();
+      const signal = AbortSignal.any([
+        runtime.lifetime.signal,
+        targetLifetime.signal,
+        ...(callerSignal ? [callerSignal] : []),
+      ]);
+      const job = (await runtime.client.request("list", { id: input.session_id }, 10000, signal))
+        .jobs[0];
+      if ((job.mode === "unsandboxed") !== (input.justification !== undefined)) {
+        throw new Error("Justification is required only for unsandboxed commands");
+      }
+      const live = isLive(job);
+      if (live && job.mode === "unsandboxed") {
+        await authorizeJob(
+          runtime,
+          id,
+          job,
+          stopAction(job),
+          input.justification!,
+          signal,
+          targetLifetime,
+        );
+      }
+      signal.throwIfAborted();
+      if (current() !== runtime) throw new Error("Command runtime generation changed");
+      if (live) {
+        // Pending input approvals for this job cannot apply once it is stopped.
+        for (const controller of runtime.approvals.get(job.id) ?? []) controller.abort();
+        // Cleanup warnings also surface through the collected job snapshot.
+        await runtime.client.request("stop", { id: job.id }, 15000, signal);
+      }
+      return deliver(
+        runtime,
+        "input",
+        {
+          id: job.id,
+          operation: { kind: "poll", chars: "" },
+          wait: STOP_COLLECT_WAIT_MS,
+          tokens: input.max_output_tokens ?? 10000,
+        },
+        signal,
+        false,
         update,
       );
     },

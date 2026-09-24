@@ -14,7 +14,10 @@ it for temporary intermediate files, not as the sole copy of important results;
 copy those to an allowed durable path.
 
 While a command runs, do meaningful non-overlapping work first. If none remains,
-poll with a long wait instead of repeatedly polling.
+poll with a long wait instead of repeatedly polling. If a command is hung (for
+example, waiting for a browser or login that cannot complete in the sandbox) or
+no longer needed, terminate it with stop_command instead of leaving it running;
+list_commands recovers session IDs.
 </sandbox>`;
 const UNAVAILABLE = `<sandbox>
 No valid policy snapshot is available. Command execution, including escalation, is unavailable. Never bypass this through another tool or user-shell execution path.

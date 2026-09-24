@@ -29,6 +29,7 @@ const Details = z.object({
   capabilities: z.boolean(),
 });
 type DisplayDetails = z.infer<typeof Details>;
+type RowKind = "command" | "stop";
 class CommandRow {
   args: Record<string, unknown> = {};
   details: DisplayDetails | undefined;
@@ -37,9 +38,11 @@ class CommandRow {
   partial = true;
   fallback = "";
   theme: Theme;
+  readonly kind: RowKind;
   private cached: { width: number; lines: string[] } | undefined;
-  constructor(theme: Theme) {
+  constructor(theme: Theme, kind: RowKind) {
     this.theme = theme;
+    this.kind = kind;
   }
   invalidate(): void {
     this.cached = undefined;
@@ -52,9 +55,11 @@ class CommandRow {
     const padding = width >= 3 ? 1 : 0;
     const theme = this.theme;
     const data = this.details;
+    // A stopped command ending by signal is the requested outcome.
     const failed =
       this.error ||
-      (!this.partial &&
+      (this.kind === "command" &&
+        !this.partial &&
         !!data &&
         !data.yielded &&
         (data.job.exit_signal !== null || data.job.exit_code !== 0));
@@ -62,7 +67,10 @@ class CommandRow {
     const elevated = !!data && data.job.mode === "unsandboxed";
     const background = !!data && data.yielded && !this.error;
     let title: string;
-    if (command !== undefined) {
+    if (this.kind === "stop") {
+      const session = sanitize(String(this.args.session_id ?? "")).slice(0, 64);
+      title = theme.fg("toolTitle", theme.bold(`stop_command ${session}`));
+    } else if (command !== undefined) {
       const approvalBadge = elevated ? theme.bold(theme.fg("warning", "E")) : "";
       const commandText = `$ ${sanitize(command)}`;
       title = approvalBadge + theme.fg("toolTitle", theme.bold(commandText));
@@ -139,17 +147,16 @@ class CommandRow {
     return rendered;
   }
 }
-export function gardenRenderers(): Pick<
-  ToolDefinition,
-  "renderShell" | "renderCall" | "renderResult"
-> {
+export function gardenRenderers(
+  kind: RowKind = "command",
+): Pick<ToolDefinition, "renderShell" | "renderCall" | "renderResult"> {
   return {
     renderShell: "self",
     renderCall(args, theme, context) {
       const row =
         context.state.gardenRow instanceof CommandRow
           ? context.state.gardenRow
-          : new CommandRow(theme);
+          : new CommandRow(theme, kind);
       row.args = args;
       row.theme = theme;
       row.error = context.isError;
