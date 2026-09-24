@@ -131,7 +131,7 @@ it("shows merged, trust-scoped effective rules and keeps them pinned until reloa
       allowWrite: [join(canonicalCwd, "workspace-output")],
       denyWrite: [join(canonicalCwd, "global-output/locked")],
     },
-    network: { allowedDomains: ["workspace.example"], deniedDomains: ["blocked.example"] },
+    network: { allowedDomains: ["workspace.example"], deniedDomains: ["blocked.example"], allowLocalBinding: false, allowUnixSockets: [] },
   };
   assert.deepEqual(snapshot(trusted), expected);
   const untrusted = await h.render(event, { ...ctx, isProjectTrusted: () => false });
@@ -141,7 +141,7 @@ it("shows merged, trust-scoped effective rules and keeps them pinned until reloa
       denyRead: [join(canonicalCwd, "global-secret")],
       allowWrite: [join(canonicalCwd, "global-output")],
     },
-    network: { allowedDomains: ["global.example"], deniedDomains: ["blocked.example"] },
+    network: { allowedDomains: ["global.example"], deniedDomains: ["blocked.example"], allowLocalBinding: false, allowUnixSockets: [] },
   });
 
   await writeFile(workspaceConfigPath, JSON.stringify({
@@ -151,6 +151,6 @@ it("shows merged, trust-scoped effective rules and keeps them pinned until reloa
   assert.deepEqual(await h.render(event, ctx), trusted);
   const reloaded = await capturePrompt(createLoader()).render(event, ctx);
   assert.deepEqual(snapshot(reloaded).filesystem.allowWrite, [join(canonicalCwd, "new-output")]);
-  assert.deepEqual(snapshot(reloaded).network, { allowedDomains: ["new.example"], deniedDomains: ["blocked.example"] });
+  assert.deepEqual(snapshot(reloaded).network, { allowedDomains: ["new.example"], deniedDomains: ["blocked.example"], allowLocalBinding: false, allowUnixSockets: [] });
   assert.notDeepEqual(reloaded, trusted);
 });

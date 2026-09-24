@@ -72,6 +72,8 @@ async function dispatch(request: Request): Promise<Responses[keyof Responses]> {
     if (
       data.contract !== CONTRACT ||
       !data.policy?.network ||
+      typeof data.policy.network.allowLocalBinding !== "boolean" ||
+      !Array.isArray(data.policy.network.allowUnixSockets) ||
       process.platform !== "darwin" ||
       Number(process.versions.node.split(".")[0]) < 26
     ) {

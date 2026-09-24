@@ -42,7 +42,10 @@ export class Sandbox {
             deniedDomains: [],
             strictAllowlist: false,
             allowAllUnixSockets: false,
-            allowLocalBinding: false,
+            // Direct loopback and Unix-socket IPC bypass the proxy, so Policy
+            // grants them explicitly rather than through domain rules.
+            allowUnixSockets: [...this.policy.network.allowUnixSockets],
+            allowLocalBinding: this.policy.network.allowLocalBinding,
           },
           // Go's macOS TLS verification needs trustd.agent. This widens the
           // Mach service boundary, not the destination policy enforced below.

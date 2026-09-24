@@ -88,5 +88,5 @@ export function harness() {
 
 export const loaded: MikotoPolicyLoadResult = { settings: DEFAULT_SETTINGS,
   document: { filesystem: { allowRead: [], denyRead: [], allowWrite: [], denyWrite: [] },
-    network: { allowedDomains: [], deniedDomains: [] } }, diagnostics: [], warnings: [] };
+    network: { allowedDomains: [], deniedDomains: [], allowLocalBinding: false, allowUnixSockets: [] } }, diagnostics: [], warnings: [] };
 export const loader = new MikotoPolicyDocumentLoader({}, "/missing-test-policy/config.json");

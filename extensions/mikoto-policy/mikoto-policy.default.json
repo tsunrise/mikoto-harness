@@ -2,7 +2,9 @@
   "$schema": "./mikoto-policy.schema.json",
   "network": {
     "allowedDomains": [],
-    "deniedDomains": []
+    "deniedDomains": [],
+    "allowLocalBinding": false,
+    "allowUnixSockets": []
   },
   "filesystem": {
     "denyRead": [],

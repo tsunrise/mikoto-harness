@@ -4,7 +4,7 @@ import type { MikotoPolicyDocumentLoader } from "./config.ts";
 
 const POLICY_GUIDANCE = `Filesystem: Reads are allowed by default; the most specific allowRead or denyRead match wins, and allowRead wins ties. Writes require allowWrite, and denyWrite always wins.
 
-Network: Access is denied by default; allowedDomains grants matching destinations unless deniedDomains matches. Garden's exact live capability endpoint is the only automatic localhost exception. The web capability runs host-side behind that endpoint, so web search and page fetches are exempt from network restrictions.`;
+Network: Access is denied by default; allowedDomains grants matching destinations unless deniedDomains matches. allowLocalBinding permits direct connections to any localhost TCP port and local listening; otherwise Garden's exact live capability endpoint is the only localhost exception. allowUnixSockets lists the only Unix sockets commands may connect to. The web capability runs host-side behind that endpoint, so web search and page fetches are exempt from network restrictions.`;
 
 const ESCALATION_GUIDANCE =
   "Each escalation requires manual user action, so repeated requests are disruptive. Keep escalation infrequent by working within the policy whenever possible. Tools without an explicit escalation parameter automatically escalate policy violations.";
@@ -38,6 +38,8 @@ function renderPolicyPrompt(document: MikotoPolicyDocument): string {
       network: {
         allowedDomains: [...document.network.allowedDomains].sort(),
         deniedDomains: [...document.network.deniedDomains].sort(),
+        allowLocalBinding: document.network.allowLocalBinding,
+        allowUnixSockets: [...document.network.allowUnixSockets].sort(),
       },
     },
     null,

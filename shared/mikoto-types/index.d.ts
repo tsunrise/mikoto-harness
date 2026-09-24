@@ -29,6 +29,17 @@ export type MikotoPolicyDocument = {
   readonly network: {
     readonly allowedDomains: readonly string[];
     readonly deniedDomains: readonly string[];
+    /**
+     * Permit direct loopback TCP from sandboxed commands: connecting to any
+     * localhost port plus binding/listening locally. Domain rules do not apply
+     * to these direct connections.
+     */
+    readonly allowLocalBinding: boolean;
+    /**
+     * Normalized absolute canonical Unix socket paths (and descendants) that
+     * sandboxed commands may bind or connect to.
+     */
+    readonly allowUnixSockets: readonly string[];
   };
 };
 
@@ -39,7 +50,7 @@ export type MikotoPolicyLoadDiagnostic =
     }
   | {
       readonly kind: "canonical_rule";
-      readonly rule: keyof MikotoPolicyDocument["filesystem"];
+      readonly rule: keyof MikotoPolicyDocument["filesystem"] | "allowUnixSockets";
       readonly path: string;
     };
 

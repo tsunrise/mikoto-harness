@@ -471,6 +471,93 @@
               "additionalProperties": false
             }
           ]
+        },
+        "allowLocalBinding": {
+          "description": "Allow sandboxed commands to connect directly to any localhost TCP port and to bind/listen locally. Domain rules do not apply to these direct loopback connections.",
+          "type": "boolean"
+        },
+        "allowUnixSockets": {
+          "description": "Unix socket paths (and descendants) sandboxed commands may bind or connect to. Symlinks resolve to canonical targets.",
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[^\\u0000*?\\[\\]]+$",
+                "description": "Literal absolute, cwd-relative, or home-relative filesystem path."
+              }
+            },
+            {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "+": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "^[^\\u0000*?\\[\\]]+$",
+                        "description": "Literal absolute, cwd-relative, or home-relative filesystem path."
+                      }
+                    },
+                    "-": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "^[^\\u0000*?\\[\\]]+$",
+                        "description": "Literal absolute, cwd-relative, or home-relative filesystem path."
+                      }
+                    }
+                  },
+                  "required": [
+                    "+",
+                    "-"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "+": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "^[^\\u0000*?\\[\\]]+$",
+                        "description": "Literal absolute, cwd-relative, or home-relative filesystem path."
+                      }
+                    }
+                  },
+                  "required": [
+                    "+"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "-": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "^[^\\u0000*?\\[\\]]+$",
+                        "description": "Literal absolute, cwd-relative, or home-relative filesystem path."
+                      }
+                    }
+                  },
+                  "required": [
+                    "-"
+                  ],
+                  "additionalProperties": false
+                }
+              ],
+              "description": "Add and/or remove exact path strings from the previous layer."
+            }
+          ]
         }
       },
       "additionalProperties": false

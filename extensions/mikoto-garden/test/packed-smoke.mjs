@@ -37,7 +37,7 @@ try {
     contract: "garden-pipes-2", runtimeParent: cwd,
     policy: {
       filesystem: { denyRead: [], allowRead: [], allowWrite: [cwd], denyWrite: [] },
-      network: { allowedDomains: [], deniedDomains: ["*"] },
+      network: { allowedDomains: [], deniedDomains: ["*"], allowLocalBinding: false, allowUnixSockets: [] },
     },
   });
   const shell = await realpath("/bin/sh");

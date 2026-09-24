@@ -56,7 +56,7 @@ async function harness(dir: string) {
   const policy: MikotoPolicy = {
     document: () => Object.freeze({
       filesystem: Object.freeze({ denyRead: [], allowRead: [], allowWrite: [dir], denyWrite: [] }),
-      network: Object.freeze({ allowedDomains: [], deniedDomains: ["*"] }),
+      network: Object.freeze({ allowedDomains: [], deniedDomains: ["*"], allowLocalBinding: false, allowUnixSockets: [] }),
     }),
     diagnostics: () => [], permissionMdPath: "/test-policy",
     resolveToolPath: (p) => p, canonicalizePath: realpath,

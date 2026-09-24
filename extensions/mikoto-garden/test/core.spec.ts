@@ -26,7 +26,7 @@ import { CONTRACT } from "../src/protocol.ts";
 
 const document: MikotoPolicyDocument = {
   filesystem: { denyRead: [], allowRead: [], allowWrite: [], denyWrite: [] },
-  network: { allowedDomains: ["example.com", "*.example.org:443"], deniedDomains: ["*:80", "private.example.org"] },
+  network: { allowedDomains: ["example.com", "*.example.org:443"], deniedDomains: ["*:80", "private.example.org"], allowLocalBinding: false, allowUnixSockets: [] },
 };
 async function temporary<T>(run: (dir: string) => Promise<T>): Promise<T> {
   const parent = fileURLToPath(new URL("../test-runtime/", import.meta.url));
@@ -45,7 +45,7 @@ test("network precedence, malformed destinations, exact infrastructure grant and
   for (const host of ["127.1", "0177.0.0.1", "::1", "localhost.", "evil\0.example.com", "example.com/"]) {
     assert.equal(evaluateDestination(net, { port: 80 }, host, 80), false);
   }
-  const denied = { allowedDomains: [], deniedDomains: ["*", "127.0.0.1", "127.0.0.1:80"] };
+  const denied = { allowedDomains: [], deniedDomains: ["*", "127.0.0.1", "127.0.0.1:80"], allowLocalBinding: false, allowUnixSockets: [] };
   assert.equal(evaluateDestination(denied, { port: 80 }, "127.0.0.1", 80), true);
   assert.equal(evaluateDestination(denied, { port: 80 }, "127.0.0.1", 81), false);
   assert.equal(evaluateDestination(denied, undefined, "127.0.0.1", 80), false);
@@ -64,7 +64,7 @@ test("compiled filesystem enforcement preserves alternating read rules and write
     try {
       await client.request("init", {
         contract: CONTRACT, runtimeParent: dir,
-        policy: { network: { allowedDomains: [], deniedDomains: ["*"] }, filesystem: {
+        policy: { network: { allowedDomains: [], deniedDomains: ["*"], allowLocalBinding: false, allowUnixSockets: [] }, filesystem: {
           denyRead: [denied, nested], allowRead: [allowed, reallowed],
           allowWrite: [dir, reallowed], denyWrite: [nested],
         } },
@@ -112,9 +112,10 @@ test("strict post-hook inputs, pipe classifications, environment and determinist
   for (const key of ["GARDEN_TOKEN", "GARDEN_SERVER", "NODE_OPTIONS", "HTTPS_PROXY", "BASH_ENV", "OPENAI_API_KEY"]) assert.equal(env[key], undefined);
   const prompt = renderGardenPrompt(document);
   assert.equal(prompt, renderGardenPrompt({ ...document, network: {
+    ...document.network,
     allowedDomains: [...document.network.allowedDomains].reverse(), deniedDomains: [...document.network.deniedDomains].reverse(),
   } }));
-  assert.equal(prompt, renderGardenPrompt({ ...document, network: { allowedDomains: [], deniedDomains: ["*"] } }),
+  assert.equal(prompt, renderGardenPrompt({ ...document, network: { allowedDomains: [], deniedDomains: ["*"], allowLocalBinding: false, allowUnixSockets: [] } }),
     "Policy, not Garden, owns the effective network snapshot");
   assert.notEqual(renderGardenPrompt(), prompt);
   assert.deepEqual(document.network.allowedDomains, ["example.com", "*.example.org:443"]);

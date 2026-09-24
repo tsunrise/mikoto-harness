@@ -46,7 +46,7 @@ test("an executor cannot initialize twice or retry a failed initialization", {
     runtimeParent: join(dir, "missing"),
     policy: {
       filesystem: { denyRead: [], allowRead: [], allowWrite: [], denyWrite: [] },
-      network: { allowedDomains: [], deniedDomains: [] },
+      network: { allowedDomains: [], deniedDomains: [], allowLocalBinding: false, allowUnixSockets: [] },
     },
   };
   try {

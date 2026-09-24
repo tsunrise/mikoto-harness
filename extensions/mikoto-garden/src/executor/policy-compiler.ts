@@ -23,7 +23,7 @@ export async function canonical(path: string): Promise<string> {
   }
 }
 export async function checkPolicyPaths(document: MikotoPolicyDocument): Promise<void> {
-  for (const paths of Object.values(document.filesystem)) {
+  for (const paths of [...Object.values(document.filesystem), document.network.allowUnixSockets]) {
     for (const path of paths) {
       if (resolve(path) !== path || /[\0*?[\]]/.test(path) || (await canonical(path)) !== path) {
         throw new Error("Unsupported policy path or canonical-path drift");

@@ -47,7 +47,9 @@ rules are defined in `src/tools.ts`.
 ## Policy and capability integration
 
 Garden obtains an immutable, session-scoped policy snapshot from Mikoto Policy.
-It translates that snapshot into SRT filesystem and network enforcement;
+It translates that snapshot into SRT filesystem and network enforcement,
+including Policy's opt-in `allowLocalBinding` and `allowUnixSockets` grants
+for direct loopback and Unix-socket IPC (both closed by default);
 explicit host launches and later host mutations use Policy's one-operation
 approval broker.
 

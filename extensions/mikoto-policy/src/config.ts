@@ -109,6 +109,17 @@ function networkArray(deny: boolean) {
 const NetworkConfig = z.strictObject({
   allowedDomains: networkArray(false).optional(),
   deniedDomains: networkArray(true).optional(),
+  allowLocalBinding: z
+    .boolean()
+    .optional()
+    .describe(
+      "Allow sandboxed commands to connect directly to any localhost TCP port and to bind/listen locally. Domain rules do not apply to these direct loopback connections.",
+    ),
+  allowUnixSockets: MergableFsPathArray
+    .optional()
+    .describe(
+      "Unix socket paths (and descendants) sandboxed commands may bind or connect to. Symlinks resolve to canonical targets.",
+    ),
 });
 
 const AgentName = z.string().min(1).regex(/^\S(?:[\s\S]*\S)?$/,
@@ -304,7 +315,7 @@ export class MikotoPolicyDocumentLoader {
       { cwd: normalizedCwd },
     );
     const resolvedPolicy = resolvePolicyFileSystemCanonicalPaths(
-      { filesystem: mergedFileSystemPaths, network: mergeNetwork(layers) },
+      { filesystem: mergedFileSystemPaths, network: mergeNetwork(layers, normalizedCwd) },
     );
     warnings.push(...resolvedPolicy.warnings);
     const result = Object.freeze({
@@ -346,17 +357,30 @@ function layerDiagnostic(configPath: string, error: unknown): MikotoPolicyLoadDi
   return { kind: (error as NodeJS.ErrnoException)?.code ? "unreadable_layer" : "invalid_layer", path: configPath };
 }
 
-function mergeNetwork(layers: readonly MikotoPolicyConfig[]): MikotoPolicyDocument["network"] {
-  const merged = { allowedDomains: [] as string[], deniedDomains: [] as string[] };
+function mergeNetwork(
+  layers: readonly MikotoPolicyConfig[],
+  cwd: string,
+  homeDir = homedir(),
+): MikotoPolicyDocument["network"] {
+  const merged = {
+    allowedDomains: [] as string[],
+    deniedDomains: [] as string[],
+    allowUnixSockets: [] as FsPath[],
+  };
+  let allowLocalBinding = false;
   for (const layer of layers) {
-    for (const key of ["allowedDomains", "deniedDomains"] as const) {
+    for (const key of ["allowedDomains", "deniedDomains", "allowUnixSockets"] as const) {
       const next = layer.network?.[key];
       if (next !== undefined) merged[key] = mergePathArray(merged[key], next);
     }
+    allowLocalBinding = layer.network?.allowLocalBinding ?? allowLocalBinding;
   }
   return Object.freeze({
     allowedDomains: Object.freeze(merged.allowedDomains),
     deniedDomains: Object.freeze(merged.deniedDomains),
+    allowLocalBinding,
+    // Lexical here; resolvePolicyFileSystemCanonicalPaths() canonicalizes.
+    allowUnixSockets: normalizeAndFreeze(merged.allowUnixSockets, cwd, homeDir),
   });
 }
 

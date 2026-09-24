@@ -25,7 +25,7 @@ function policyWith(
 ): MikotoPolicy {
   return {
     document: () => ({
-      network: { allowedDomains: [], deniedDomains: [] },
+      network: { allowedDomains: [], deniedDomains: [], allowLocalBinding: false, allowUnixSockets: [] },
       filesystem: {
         denyRead: [],
         allowRead: [],

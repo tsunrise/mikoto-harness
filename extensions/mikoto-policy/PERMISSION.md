@@ -117,6 +117,32 @@ Network access requires an explicit matching allow. A matching deny takes
 precedence over every allow, and unmatched destinations remain denied. Network
 decisions do not open an approval dialog.
 
+### Local IPC
+
+Domain rules only govern proxied traffic. Clients such as database drivers and
+the Docker CLI connect directly to loopback ports or Unix sockets, which need
+separate grants:
+
+```json
+{
+  "network": {
+    "allowLocalBinding": true,
+    "allowUnixSockets": ["~/.docker/run/docker.sock"]
+  }
+}
+```
+
+- `allowLocalBinding` (default `false`, replaced by later layers) permits
+  direct connections to every localhost TCP port and local bind/listen.
+  Domain rules, including `deniedDomains`, do not apply to these connections.
+- `allowUnixSockets` (default empty) lists socket paths, following the same
+  path syntax and `+`/`-` deltas as filesystem rules. Each path grants itself
+  and its descendants. Symlinks resolve to their canonical target, and
+  unresolvable entries are dropped with a `canonical_rule` diagnostic.
+
+Granting a container-runtime socket such as Docker's effectively grants host
+access, because containers can mount arbitrary host paths.
+
 `policy.diagnostics()` distinguishes invalid/unreadable selected layers and
 dropped canonical rules from optional absence or an untrusted workspace.
 Editing policy still requires separate user authorization and `/reload`.

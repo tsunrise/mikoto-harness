@@ -21,6 +21,13 @@ export function resolvePolicyFileSystemCanonicalPaths(
     network: Object.freeze({
       allowedDomains: Object.freeze([...policy.network.allowedDomains]),
       deniedDomains: Object.freeze([...policy.network.deniedDomains]),
+      allowLocalBinding: policy.network.allowLocalBinding,
+      // Socket paths are commonly symlinks into another tree (for example,
+      // /var/run/docker.sock). Grant the canonical target the user named
+      // rather than applying the filesystem allow-boundary check.
+      allowUnixSockets: resolveRules(
+        policy.network.allowUnixSockets, false, warnings, diagnostics, "allowUnixSockets",
+      ),
     }),
     filesystem: Object.freeze({
       denyRead: resolveRules(filesystem.denyRead, false, warnings, diagnostics, "denyRead"),
@@ -42,7 +49,7 @@ function resolveRules(
   validateAllowBoundary: boolean,
   warnings: Set<string>,
   diagnostics: MikotoPolicyLoadDiagnostic[],
-  rule: keyof MikotoPolicyDocument["filesystem"],
+  rule: keyof MikotoPolicyDocument["filesystem"] | "allowUnixSockets",
 ): readonly string[] {
   const canonicalPaths = new Set<string>();
 

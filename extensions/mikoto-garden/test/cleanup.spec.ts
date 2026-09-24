@@ -34,7 +34,7 @@ test("real initialization cancellation, parent-channel loss, and executor crash 
     contract: CONTRACT, runtimeParent: dir,
     policy: {
       filesystem: { denyRead: [], allowRead: [], allowWrite: [dir], denyWrite: [] },
-      network: { allowedDomains: [], deniedDomains: ["*"] },
+      network: { allowedDomains: [], deniedDomains: ["*"], allowLocalBinding: false, allowUnixSockets: [] },
     },
   };
   const child = (client: ExecutorClient) => (client as unknown as { child: ChildProcess }).child;

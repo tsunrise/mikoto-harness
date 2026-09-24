@@ -39,7 +39,7 @@ test("two independent compiled runtimes: exact grants, token separation, clean h
   const right = new ExecutorClient("right", process.execPath, () => {}, () => {});
   const document: MikotoPolicyDocument = {
     filesystem: { denyRead: [], allowRead: [], allowWrite: [dir], denyWrite: [] },
-    network: { allowedDomains: [`127.0.0.1:${rightEndpoint.port}`], deniedDomains: ["*", "127.0.0.1", `127.0.0.1:${leftEndpoint.port}`] },
+    network: { allowedDomains: [`127.0.0.1:${rightEndpoint.port}`], deniedDomains: ["*", "127.0.0.1", `127.0.0.1:${leftEndpoint.port}`], allowLocalBinding: false, allowUnixSockets: [] },
   };
   const curl = (url: string, token: string) =>
     `/usr/bin/curl -sS --max-time 3 -o /dev/null -w '%{http_code}' -H ${shellQuote(`Authorization: Bearer ${token}`)} -d Hello ${shellQuote(url + "/probe")}`;
