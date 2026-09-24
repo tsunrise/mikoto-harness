@@ -57,6 +57,15 @@ uncertainty, not evidence of safety.
 Crossing a policy boundary, requesting host execution, retrying after a sandbox denial,
 or writing outside the workspace alone is not high risk:
 the policy explains why an exception is needed, not an absolute ban on exceptions.
+Network access to a domain outside the allowlist is normally low risk and allowed when
+the operation is non-destructive (e.g. reading pages or docs, downloading packages or
+source), the domain looks reputable (not a paste, file-sharing or tunneling service,
+raw IP address, or suspicious-looking host), and no workspace data, credentials or
+secrets are sent. Writes (create, edit, delete) outside the allowed write paths are
+allowed when a recent human message asks for, or clearly implies the user expects,
+modification of that path; keep scope to what the user referred to, not unrelated
+paths. Writes to credentials, SSH/GPG keys, shell startup files or security
+configuration still require the user to name that specific file.
 Prior decisions are not precedent or reusable grants. Do not bypass prior denials
 via another tool. However, explicit human re-approval covering the exact action
 after the concrete risk was disclosed establishes high authorization, even after
