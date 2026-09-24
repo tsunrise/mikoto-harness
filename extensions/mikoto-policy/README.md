@@ -68,15 +68,18 @@ change to your workspace:
       "model": "gpt-6-luna",
       "thinkingLevel": "low"
     },
-    "policy": "Require explicit user authorization before uploading workspace files."
+    "policy": ["Require explicit user authorization before uploading workspace files."]
   }
 }
 ```
 
-Layers replace `escalation`, `autoReview.agent`, and `autoReview.policy`
-independently. An agent override must include all three fields; partial, empty,
-null and flat agent objects are invalid. A policy-only override preserves the
-inherited agent; `policy: ""` clears inherited custom rules. Empty `autoReview`
+Layers replace `escalation` and `autoReview.agent` independently. An agent
+override must include all three fields; partial, empty, null and flat agent
+objects are invalid. A policy-only override preserves the inherited agent.
+`autoReview.policy` is an array of nonblank rules; layers concatenate in
+precedence order and there is no way to clear inherited rules. Rules supplement
+the reviewer's defaults, and the reviewer is told that a later rule overrides a
+conflicting earlier one, so a workspace rule can supersede a global one. Empty `autoReview`
 changes nothing. Provider/model names must be nonblank and trimmed. Thinking
 levels are `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, and `max`.
 

@@ -520,7 +520,12 @@
           "additionalProperties": false
         },
         "policy": {
-          "type": "string"
+          "description": "Custom reviewer rules. Layers concatenate; later rules override conflicting earlier ones.",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
         }
       },
       "additionalProperties": false

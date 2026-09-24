@@ -51,7 +51,7 @@ function fixture(
   const diagnostics = new ReviewDiagnostics();
   const reviewer = new AutoReviewer(ctx, { ...loaded, settings: {
     escalation: "auto-review", autoReview: { agent: { provider: "fake", model: "reviewer", thinkingLevel: "low" },
-      policy: "Caller custom policy.\nKeep this exact." },
+      policy: ["Caller custom policy.\nKeep this exact.", "Later rule"] },
   }, ...overrides }, () => { if (!current) throw new Error("stale"); }, () => true,
   () => [{ path: "/tmp/AGENTS.md", content: "Loaded parent instructions" }], diagnostics);
   return { reviewer, calls, finds, ctx, manager, diagnostics, invalidate: () => { current = false; } };
@@ -77,7 +77,7 @@ it("maps requested thinking with Pi's supported-level helper without changing mo
     ["off", undefined, true], ["max", "high", true], ["low", undefined, false],
   ] as const) {
     const f = fixture(undefined, { settings: { escalation: "auto-review", autoReview: {
-      agent: { provider: "fake", model: "reviewer", thinkingLevel: requested }, policy: "",
+      agent: { provider: "fake", model: "reviewer", thinkingLevel: requested }, policy: [],
     } } }, { ...model, reasoning });
     assert.deepEqual(await f.reviewer.review(request(), signal()), { decision: "approve" });
     assert.equal(f.calls[0]!.options.reasoning, effective);
@@ -97,7 +97,7 @@ it("resolves the configured model, private tools, exact action, custom policy an
   assert.notEqual(call.options.sessionId, f.manager.getSessionId());
   assert.deepEqual(call.context.tools?.map((tool) => tool.name),
     ["review_stat", "review_read", "review_list", "review_search"]);
-  assert.ok(call.context.systemPrompt?.includes(JSON.stringify("Caller custom policy.\nKeep this exact.")));
+  assert.ok(call.context.systemPrompt?.includes(JSON.stringify(["Caller custom policy.\nKeep this exact.", "Later rule"])));
   const evidence = JSON.parse(call.context.messages[0]!.content as string);
   assert.deepEqual(evidence.action, action);
   assert.deepEqual(evidence.parentConstraints.contextFiles,
@@ -335,7 +335,7 @@ it("required action/custom-policy/newest human material is never truncated to fi
   human.manager.appendMessage({ role: "user", content: "x".repeat(512 * 1024), timestamp: 2 });
   assert.deepEqual(await human.reviewer.review(request(), signal()), { decision: "reject", cause: "error" });
   const custom = fixture(undefined, { settings: { ...loaded.settings,
-    autoReview: { ...loaded.settings.autoReview, policy: "x".repeat(512 * 1024) } } });
+    autoReview: { ...loaded.settings.autoReview, policy: ["x".repeat(512 * 1024)] } } });
   assert.deepEqual(await custom.reviewer.review(request(), signal()), { decision: "reject", cause: "error" });
   const optional = fixture();
   optional.manager.appendMessage(response("optional".repeat(100000)));

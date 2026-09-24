@@ -51,17 +51,19 @@ describe("MikotoPolicyDocumentLoader", () => {
       { autoReview: { agent: { provider: " p ", model: "m", thinkingLevel: "low" } } },
       { autoReview: { agent: { provider: "p", model: "", thinkingLevel: "low" } } },
       { autoReview: { agent: { provider: "p", model: "m", thinkingLevel: "bogus" } } },
-      { autoReview: { extra: "" } },
+      { autoReview: { extra: "" } }, { autoReview: { policy: "string" } },
+      { autoReview: { policy: [" "] } },
     ]) assert.equal(MikotoPolicyConfig.safeParse(value).success, false);
     const agent = { provider: "caller", model: "chosen", thinkingLevel: "max" } as const;
     const merged = mergeSettings([
-      { escalation: "auto-review", autoReview: { policy: "global" } },
+      { escalation: "auto-review", autoReview: { policy: ["global"] } },
       { autoReview: { agent } }, { autoReview: {} },
     ]);
-    assert.deepEqual(merged.autoReview, { agent, policy: "global" });
+    assert.deepEqual(merged.autoReview, { agent, policy: ["global"] });
     assert.ok(Object.isFrozen(merged.autoReview.agent));
-    assert.deepEqual(mergeSettings([{ autoReview: { policy: "old" } },
-      { autoReview: { policy: "" } }]).autoReview, { ...DEFAULT_SETTINGS.autoReview, policy: "" });
+    assert.ok(Object.isFrozen(merged.autoReview.policy));
+    assert.deepEqual(mergeSettings([{ autoReview: { policy: ["old", "shared"] } }, { autoReview: { policy: [] } },
+      { autoReview: { policy: ["new"] } }]).autoReview, { ...DEFAULT_SETTINGS.autoReview, policy: ["old", "shared", "new"] });
   });
 
   it("pins layered settings, skips untrusted overrides and reloads without deep merging agents", async () => {
@@ -69,18 +71,18 @@ describe("MikotoPolicyDocumentLoader", () => {
       const globalPath = path.join(cwd, "global.json");
       const workspacePath = path.join(cwd, "mikoto-policy.json");
       const agent = { provider: "chosen-provider", model: "chosen-model", thinkingLevel: "high" };
-      await writeFile(globalPath, JSON.stringify({ escalation: "auto-review", autoReview: { agent, policy: "global" } }));
-      await writeFile(workspacePath, JSON.stringify({ autoReview: { policy: "" } }));
+      await writeFile(globalPath, JSON.stringify({ escalation: "auto-review", autoReview: { agent, policy: ["global"] } }));
+      await writeFile(workspacePath, JSON.stringify({ autoReview: { policy: ["workspace"] } }));
       const loader = new MikotoPolicyDocumentLoader({}, globalPath);
-      assert.deepEqual((await loader.load(cwd, true)).settings.autoReview, { agent, policy: "" });
-      assert.deepEqual((await loader.load(cwd, false)).settings.autoReview, { agent, policy: "global" });
+      assert.deepEqual((await loader.load(cwd, true)).settings.autoReview, { agent, policy: ["global", "workspace"] });
+      assert.deepEqual((await loader.load(cwd, false)).settings.autoReview, { agent, policy: ["global"] });
       await writeFile(workspacePath, JSON.stringify({ escalation: "always-deny" }));
       assert.equal((await loader.load(cwd, true)).settings.escalation, "auto-review");
       assert.equal((await new MikotoPolicyDocumentLoader({}, globalPath).load(cwd, true)).settings.escalation, "always-deny");
       await writeFile(workspacePath, JSON.stringify({ autoReview: { agent: { thinkingLevel: "low" } } }));
       const invalid = await new MikotoPolicyDocumentLoader({}, globalPath).load(cwd, true);
       assert.ok(invalid.diagnostics.some((d) => d.kind === "invalid_layer"));
-      assert.deepEqual(invalid.settings.autoReview, { agent, policy: "global" });
+      assert.deepEqual(invalid.settings.autoReview, { agent, policy: ["global"] });
       assert.equal("escalation" in invalid.document, false);
       assert.equal("autoReview" in invalid.document, false);
     });

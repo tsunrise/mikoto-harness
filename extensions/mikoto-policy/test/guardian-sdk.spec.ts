@@ -22,7 +22,7 @@ it("real Pi 0.87.1 registry and Apply Patch execute only the reviewed operation,
       escalation: "auto-review",
       filesystem: { allowWrite: [], denyWrite: [] },
       autoReview: { agent: { provider: "guardian-test", model: "review", thinkingLevel: "low" },
-        policy: "SDK custom rule" },
+        policy: ["SDK custom rule"] },
     }));
     await writeFile(join(cwd, "evidence"), "read-only investigation");
     const runtime = await ModelRuntime.create({

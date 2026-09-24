@@ -120,26 +120,29 @@ const ReviewAgent = z.strictObject({
 });
 export type EscalationSettings = Readonly<{
   escalation: "ask-me" | "auto-review" | "always-deny";
-  autoReview: Readonly<{ agent: Readonly<z.infer<typeof ReviewAgent>>; policy: string }>;
+  autoReview: Readonly<{ agent: Readonly<z.infer<typeof ReviewAgent>>; policy: readonly string[] }>;
 }>;
 export const DEFAULT_SETTINGS: EscalationSettings = Object.freeze({
   escalation: "ask-me",
   autoReview: Object.freeze({
     agent: Object.freeze({ provider: "openai-codex", model: "gpt-6-luna", thinkingLevel: "low" }),
-    policy: "",
+    policy: Object.freeze([]),
   }),
 });
 
 export function mergeSettings(layers: readonly MikotoPolicyConfig[]): EscalationSettings {
-  let { escalation, autoReview: { agent, policy } } = DEFAULT_SETTINGS;
+  let { escalation, autoReview: { agent } } = DEFAULT_SETTINGS;
+  // Custom rules accumulate in layer order; the reviewer is told that later
+  // rules override conflicting earlier ones.
+  const policy = [...DEFAULT_SETTINGS.autoReview.policy];
   for (const layer of layers) {
     escalation = layer.escalation ?? escalation;
     agent = layer.autoReview?.agent ?? agent;
-    policy = layer.autoReview?.policy ?? policy;
+    policy.push(...layer.autoReview?.policy ?? []);
   }
   return Object.freeze({
     escalation,
-    autoReview: Object.freeze({ agent: Object.freeze({ ...agent }), policy }),
+    autoReview: Object.freeze({ agent: Object.freeze({ ...agent }), policy: Object.freeze(policy) }),
   });
 }
 
@@ -154,7 +157,8 @@ export const MikotoPolicyConfig = z
     escalation: z.enum(["ask-me", "auto-review", "always-deny"]).optional(),
     autoReview: z.strictObject({
       agent: ReviewAgent.optional(),
-      policy: z.string().optional(),
+      policy: z.array(z.string().trim().min(1)).optional()
+        .describe("Custom reviewer rules. Layers concatenate; later rules override conflicting earlier ones."),
     }).optional(),
   })
   .meta({

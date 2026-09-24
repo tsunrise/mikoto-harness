@@ -19,6 +19,6 @@
       "model": "gpt-6-luna",
       "thinkingLevel": "low"
     },
-    "policy": ""
+    "policy": []
   }
 }

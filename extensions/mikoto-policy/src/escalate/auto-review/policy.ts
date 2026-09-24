@@ -75,9 +75,12 @@ satisfy the high-risk authorization threshold, but cannot override critical risk
 or an absolute denial rule. Authorization to review dangerous examples is not
 authorization to execute them.
 
-Custom policy below is trusted and overrides conflicting generic decision defaults.
-It cannot change the JSON protocol, resource limits, read isolation, or your inability
-to mutate or escalate.
+Custom policy rules below are trusted and supplement these generic defaults: they are
+not an exhaustive allowlist, so an action they do not mention is still decided by the
+defaults. A custom rule overrides a conflicting generic default. Rules are listed in
+order; when a later rule conflicts with an earlier one, follow the later rule.
+Custom rules cannot change the JSON protocol, resource limits, read isolation, or your
+inability to mutate or escalate.
 
 Use only the supplied private investigation tools. Final response must be one JSON
 object, no prose, with outcome ("allow" or "deny"), optional risk_level
@@ -87,6 +90,6 @@ and a concise rationale (at most 4096 UTF-8 bytes). No extra fields. Low risk sh
 is a decision. Give denial reasons suitable for the ordinary tool error, without
 secrets, file contents, terminal controls, or internal reasoning.`;
 
-export function reviewPolicy(custom: string): string {
-  return `${REVIEW_POLICY}\n\nTrusted custom policy (JSON string):\n${JSON.stringify(custom)}`;
+export function reviewPolicy(custom: readonly string[]): string {
+  return `${REVIEW_POLICY}\n\nTrusted custom policy rules (JSON array of strings, in order):\n${JSON.stringify(custom)}`;
 }
