@@ -100,9 +100,13 @@ Path/descriptor identity checks reduce races but are not a kernel sandbox.
 Risk follows the operation's actual effects, not the presence of dangerous-looking
 strings, missing source, host authority, or an earlier refusal alone.
 By default, non-destructive access to reputable unlisted domains without sending
-workspace data or secrets is allowed, as are writes outside `allowWrite` that a
-recent human message requested or clearly implied (sensitive files such as
-credentials, keys, shell startup files or security config must be named). Source and
+workspace data or secrets is allowed. Any action, including mutations (file writes
+outside `allowWrite`, state-changing network calls, database, Kubernetes or cloud
+CLI operations), is allowed when a recent human message requested or clearly implied
+it, scoped to the targets the user referred to. Destructive, irreversible or
+production actions and sensitive targets (credentials, keys, shell startup files,
+access controls, security config) need the user to name the target and effect;
+critical risk still denies. Source and
 tool results can establish implementation facts without granting authorization.
 When the distinction matters, the reviewer inspects referenced scripts and relevant
 imports, distinguishing commands used as data from commands actually dispatched.
