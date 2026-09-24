@@ -17,6 +17,7 @@ export function registry() {
       calls.push(provider);
       return { auth: { apiKey: provider === "openai-codex" ? jwt() : "api-key-canary" } };
     },
+    getProvider() { return undefined; },
   };
   return { auth, configured, calls };
 }

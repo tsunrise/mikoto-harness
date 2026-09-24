@@ -7,6 +7,9 @@ const signal = () => new AbortController().signal;
 
 test("prefers Codex, ignores provider redirects/headers, and resolves afresh", async () => {
   const h = registry();
+  h.auth.getProvider = () => ({
+    baseUrl: "https://credential-thief.invalid", headers: { secret: "canary" },
+  }) as any;
   const original = h.auth.getProviderAuth;
   h.auth.getProviderAuth = async (provider) => {
     const result = await original(provider);
@@ -24,7 +27,7 @@ test("prefers Codex, ignores provider redirects/headers, and resolves afresh", a
   assert.deepEqual(h.calls, ["openai-codex", "openai-codex"]);
 });
 
-test("API-only resolution preserves only organization/project headers and follows auth changes", async () => {
+test("API-only resolution defaults to OpenAI and follows auth changes", async () => {
   const h = registry();
   h.configured.delete("openai-codex");
   h.auth.getProviderAuth = async () => ({
@@ -40,9 +43,54 @@ test("API-only resolution preserves only organization/project headers and follow
   assert.equal(result.headers.authorization, "Bearer environment-key");
   assert.equal(result.headers["openai-organization"], "org");
   assert.equal(result.headers["openai-project"], "project");
-  assert.equal(result.headers["x-secret"], undefined);
   h.configured.clear();
   await assert.rejects(resolve(signal()), { code: "auth_unavailable" });
+});
+
+test("API-only resolution follows the registered provider endpoint and headers", async () => {
+  const h = registry();
+  h.configured.delete("openai-codex");
+  h.auth.getProvider = (provider) => {
+    assert.equal(provider, "openai");
+    return { baseUrl: "https://gateway.example.com/openai/", headers: {
+      "x-provider": "static", "x-dropped": "inherited",
+    } } as any;
+  };
+  h.auth.getProviderAuth = async () => ({ auth: { apiKey: "access-token", headers: {
+    "cf-access-token": "access-token", "X-Requested-With": "xmlhttprequest",
+    "x-dropped": null, authorization: "wrong", host: "evil.invalid", "bad header": "x",
+    "x-crlf": "a\r\nb",
+  } } } as any);
+  const result = await createAuthResolver(h.auth)(signal());
+  assert.equal(result.endpoint, "https://gateway.example.com/openai/alpha/search");
+  assert.deepEqual(result.headers, {
+    "x-provider": "static",
+    "cf-access-token": "access-token",
+    "x-requested-with": "xmlhttprequest",
+    accept: "application/json",
+    "content-type": "application/json",
+    originator: "pi",
+    authorization: "Bearer access-token",
+  });
+});
+
+test("credential base URL wins over the provider base URL", async () => {
+  const h = registry();
+  h.configured.delete("openai-codex");
+  h.auth.getProvider = () => ({ baseUrl: "https://provider.example.com/v1" }) as any;
+  h.auth.getProviderAuth = async () => ({ auth: { apiKey: "k", baseUrl: "https://credential.example.com/v1" } });
+  const result = await createAuthResolver(h.auth)(signal());
+  assert.equal(result.endpoint, "https://credential.example.com/v1/alpha/search");
+});
+
+test("rejects unsafe OpenAI provider base URLs", async () => {
+  for (const baseUrl of ["http://gateway.example.com", "https://user:pass@example.com",
+    "https://example.com/v1?x=1", "https://example.com/v1#frag", "not a url"]) {
+    const h = registry();
+    h.configured.delete("openai-codex");
+    h.auth.getProvider = () => ({ baseUrl }) as any;
+    await assert.rejects(createAuthResolver(h.auth)(signal()), { code: "auth_unavailable" });
+  }
 });
 
 test("subscription failure is never absence or an API fallback", async () => {
