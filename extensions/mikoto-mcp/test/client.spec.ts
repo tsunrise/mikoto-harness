@@ -53,7 +53,6 @@ for (const type of ["http", "sse"] as const) test(`${type} uses static headers o
       assert.equal(init?.redirect, "error");
       assert.equal(new URL(String(input)).origin, "https://example.com");
       if (method === "GET") {
-        if (type === "http") return new Response(null, { status: 405 });
         return new Response(new ReadableStream({
           start(controller) {
             stream = controller;
@@ -81,13 +80,41 @@ for (const type of ["http", "sse"] as const) test(`${type} uses static headers o
   await adapter.connect(timer.signal, deadline);
   assert.equal((await adapter.list(undefined, timer.signal, deadline)).tools.length, 1);
   assert.equal((await adapter.call("takeScreenshot", {}, timer.signal, deadline)).isError, true);
-  assert.ok(calls.some(c => c.method === "GET"));
+  // Streamable HTTP never opens the optional standalone stream; SSE needs it.
+  assert.equal(calls.some(c => c.method === "GET"), type === "sse");
   assert.ok(calls.some(c => c.method === "POST"));
   for (const call of calls) {
     assert.equal(call.headers.get("authorization"), "Bearer static");
     assert.equal(call.headers.get("x-key"), "key");
   }
   await adapter.close();
+  assert.deepEqual(errors, []);
+});
+
+test("streamable HTTP stays usable when a server would end its standalone stream", async t => {
+  const errors: unknown[] = [];
+  let gets = 0;
+  const adapter = createAdapter({ type: "http", url: "https://example.com/mcp", headers: {} }, e => errors.push(e), {
+    fetch: async (_input, init) => {
+      if ((init?.method ?? "GET") === "GET") {
+        // Like a proxy response deadline: headers succeed, then the body fails.
+        gets++;
+        return new Response(new ReadableStream({ start(controller) { controller.error(new Error("deadline")); } }),
+          { headers: { "content-type": "text/event-stream" } });
+      }
+      const request = JSON.parse(String(init?.body));
+      if (request.id === undefined) return new Response(null, { status: 202 });
+      return Response.json(reply(request));
+    },
+  });
+  cleanup(t, () => adapter.close());
+  const timer = budget([], 2000); cleanup(t, timer.dispose);
+  const deadline = Date.now() + 2000;
+  await adapter.connect(timer.signal, deadline);
+  // Give any SDK background stream work a chance to run and fail.
+  await new Promise(resolve => setTimeout(resolve, 20));
+  assert.equal((await adapter.call("takeScreenshot", {}, timer.signal, deadline)).isError, true);
+  assert.equal(gets, 0);
   assert.deepEqual(errors, []);
 });
 

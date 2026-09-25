@@ -58,6 +58,18 @@ test("rejects forbidden/invalid headers, unsupported expansion, and config bound
   assert.throws(() => normalizeConfig({ mcpServers: Object.fromEntries(Array.from({ length: 65 }, (_, i) => [i, { command: "x" }])) }, "/c", "/c"));
 });
 
+test("disabledTools is parsed without affecting the fingerprint", () => {
+  const [plain, hidden, bad] = normalizeConfig({ mcpServers: {
+    plain: { url: "https://example.com/mcp" },
+    hidden: { url: "https://example.com/mcp", disabledTools: ["a", "b"] },
+    bad: { url: "https://example.com/mcp", disabledTools: [""] },
+  } }, "/c", "/c").entries;
+  assert.equal(plain.disabledTools, undefined);
+  assert.deepEqual([...hidden.disabledTools!], ["a", "b"]);
+  assert.equal(hidden.fingerprint, plain.fingerprint);
+  assert.equal(bad.reason, "invalid_config");
+});
+
 test("stable fingerprints include credentials, cwd and inherited environment", () => {
   const a = { type: "stdio" as const, command: "node", cwd: "/a", args: [], env: { A: "1", B: "2" } };
   assert.equal(fingerprint(a), fingerprint({ ...a, env: { B: "2", A: "1" } }));

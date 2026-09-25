@@ -79,12 +79,19 @@ export class Manager {
         if (entry.reason === "invalid_config") this.warn(entry.server, entry.reason);
         return;
       }
-      server.snapshot = await this.cache.read(entry.server, entry.fingerprint!);
+      server.snapshot = this.visible(server, await this.cache.read(entry.server, entry.fingerprint!));
     }));
     if (this.lifetime.signal.aborted) return;
     for (const server of this.servers.values()) {
       if (server.config) this.track(this.discover(server));
     }
+  }
+  // Disabled tools are hidden in memory only; the disk cache keeps the full
+  // catalog so editing disabledTools needs no cache invalidation.
+  private visible(server: Server, snapshot: ServerSnapshot | undefined) {
+    const hidden = server.disabledTools;
+    if (!snapshot || !hidden?.size) return snapshot;
+    return freeze({ ...snapshot, tools: snapshot.tools.filter(t => !hidden.has(t.name)) });
   }
   private disable(server: Server, error: unknown) {
     if (this.lifetime.signal.aborted || server.state === "disabled") return;
@@ -127,7 +134,7 @@ export class Manager {
       encodeJson(snapshot, 16 * MiB);
       signal.throwIfAborted();
       this.assertServer(server);
-      server.snapshot = freeze(snapshot);
+      server.snapshot = this.visible(server, freeze(snapshot));
       server.fresh = true; server.state = "ready";
       server.discovery.resolve();
       timer.dispose();

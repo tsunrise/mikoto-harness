@@ -15,6 +15,7 @@ export const serverConfigSchema = z.strictObject({
   url: configString.optional(), headers: stringMap.optional(),
   type: z.enum(["stdio", "http", "streamable-http", "sse"]).optional(),
   disabled: z.boolean().optional(), oauth: z.unknown().optional(), auth: z.unknown().optional(),
+  disabledTools: z.array(toolName).max(5000).optional(),
 });
 
 export function boundedArguments(value: unknown): value is Record<string, unknown> {

@@ -9,7 +9,11 @@ import { MiB, serverConfigSchema, serverName } from "./schema.ts";
 export type TransportConfig =
   | { type: "stdio"; command: string; args: string[]; env: Record<string, string>; cwd: string }
   | { type: "http" | "sse"; url: string; headers: Record<string, string> };
-export type ConfigEntry = { server: string; config?: TransportConfig; fingerprint?: string; reason?: string };
+export type ConfigEntry = {
+  server: string; config?: TransportConfig; fingerprint?: string; reason?: string;
+  /** Tool names hidden from search, inspection and calls. Not part of the cache fingerprint. */
+  disabledTools?: ReadonlySet<string>;
+};
 export type ConfigResult = { entries: ConfigEntry[]; unavailable: boolean };
 export const defaultConfigPath = () => join(homedir(), ".pi", "agent", "mcp.json");
 export const defaultCacheDir = () => join(homedir(), ".pi", "agent", "cache", "mikoto-mcp");
@@ -97,7 +101,8 @@ export function normalizeConfig(
         }
         config = { type, url: parsed.href, headers: { ...headers } };
       }
-      return { server, config, fingerprint: fingerprint(config) };
+      return { server, config, fingerprint: fingerprint(config),
+        ...(raw.disabledTools?.length ? { disabledTools: new Set(raw.disabledTools) } : {}) };
     } catch { return { server, reason: "invalid_config" }; }
   });
   return { entries, unavailable: false };

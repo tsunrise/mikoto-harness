@@ -62,6 +62,13 @@ export function createAdapter(
     try {
       const url = new URL(input instanceof Request ? input.url : String(input));
       if (config.type === "stdio" || url.origin !== new URL(config.url).origin) throw new McpError("transport_error");
+      // Streamable HTTP's standalone GET stream only carries server-initiated
+      // messages, which this client never consumes. Servers and proxies end it
+      // on idle/response deadlines, and the SDK reports every such end as a
+      // transport error, which would disable a healthy server mid-session.
+      // Decline it the way servers without that stream do (405, per spec).
+      const method = (init?.method ?? (input instanceof Request ? input.method : "GET")).toUpperCase();
+      if (config.type === "http" && method === "GET") return new Response(null, { status: 405 });
       const response = await (options.fetch ?? fetch)(input, {
         ...init, redirect: "error",
         signal: AbortSignal.any([lifetime.signal, ...(init?.signal ? [init.signal] : [])]),

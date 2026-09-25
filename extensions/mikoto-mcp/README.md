@@ -68,6 +68,9 @@ credential-bearing config; the extension never rewrites it or its permissions.
   environment plus explicit env is inherited, never `GARDEN_*` variables.
 - Header names/values must satisfy HTTP rules. Host, framing/connection,
   Accept, Content-Type, and `mcp-*` overrides are forbidden.
+- `disabledTools: ["name", ...]` (any transport) hides those tool names from
+  search, `/mcp` counts and calls (`unknown_tool`). The disk cache keeps the
+  full catalog, so editing the list needs only a reload. Unknown names are ignored.
 - `disabled: true` skips the server/cache. Non-null/non-false `oauth` or `auth`
   skips it as unsupported auth. Use static headers/env for credentials.
   401/403 disables that connection: no OAuth discovery, login, browser or retry.
@@ -80,6 +83,9 @@ Tool metadata and results are untrusted data. They do not authorize credential
 setup, config edits, or unrelated actions. Server instructions are not injected.
 No resources/prompts, sampling, roots, elicitation, tasks, dynamic tool
 registration, background jobs, reconnects, or tool-list-change refreshes.
+Streamable HTTP never opens the optional standalone GET stream, which carries
+only server-initiated messages. Servers and proxies routinely end that stream
+on idle or response deadlines, and ending it must not disable a healthy server.
 Task-required tools remain inspectable but cannot be searched/called.
 
 ## Catalog lifetime and inspection
@@ -118,7 +124,11 @@ Rerun the command to see updated counts; disabled metadata is inspection-only.
 ## Execution and media
 
 Only `POST /mcp/call` is bound. It accepts
-`{server,name,arguments?:object}`; arguments default to `{}`. The server owns
+`{server,name,arguments?:object}`; arguments default to `{}`. The bundled
+skill's `scripts/mcp.mjs SERVER TOOL [JSON|-]` helper wraps the route for shells.
+It prints text content, one line per artifact, and a pointer to the complete
+saved response when it leaves data out. It exits 2 for `isError` and 1 for
+failures. The server owns
 semantic argument validation—remote schemas are not compiled or dereferenced.
 Argument JSON is bounded to depth 32 / 4,096 values. Search is not authorization;
 known catalog names may be called directly. There is no MCP execution Pi tool.

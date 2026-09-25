@@ -33,6 +33,20 @@ test("warm search precedes handshake; warm call waits for handshake but not list
   assert.equal(manager.servers.get("browser")!.state, "pending");
 });
 
+test("disabledTools hides tools from search and calls but keeps them in the disk cache", async t => {
+  const paths = await setup(t, { browser: { command: "unused", disabledTools: ["hidden"] } }), fake = new Fake();
+  const manager = new Manager(paths.root, () => {}, { ...paths, adapter: () => fake });
+  cleanup(t, () => manager.close());
+  fake.ready([tool(), tool("hidden")]);
+  const found = await manager.search([{ query: "screenshot", limit: 20 }]);
+  assert.deepEqual(found.results[0].tools.map(x => x.name), ["takeScreenshot"]);
+  await assert.rejects(manager.call({ server: "browser", name: "hidden" }, signal()), { code: "unknown_tool" });
+  assert.equal(fake.calls.length, 0);
+  await manager.cache.settled();
+  const cached = await manager.cache.read("browser", manager.servers.get("browser")!.fingerprint!);
+  assert.deepEqual(cached?.tools.map(x => x.name), ["takeScreenshot", "hidden"]);
+});
+
 test("cold batch waits in parallel; filter isolates unrelated cold server", async t => {
   const paths = await setup(t, { a: { command: "a" }, b: { command: "b" } }), a = new Fake(), b = new Fake();
   const manager = new Manager(paths.root, () => {}, { ...paths, adapter: config => config.type === "stdio" && config.command === "a" ? a : b });
