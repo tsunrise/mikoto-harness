@@ -18,7 +18,8 @@ test("packed Garden package discovers its capability-creator skill without insta
   let child: ReturnType<typeof spawn> | undefined;
   try {
     const packed = await run("npm", ["pack", "--ignore-scripts", "--json", "--pack-destination", dir], { cwd: root });
-    const [metadata] = JSON.parse(packed.stdout) as { filename: string; files: { path: string }[] }[];
+    // npm 12 keys pack results by package name; older versions used an array.
+    const [metadata] = Object.values(JSON.parse(packed.stdout)) as { filename: string; files: { path: string }[] }[];
     assert.ok(metadata!.files.some((file) => file.path === "skills/capability-creator/SKILL.md"));
     assert.ok(!metadata!.files.some((file) => file.path.startsWith("dist/skills/")));
     await run("tar", ["-xzf", join(dir, metadata!.filename), "-C", dir]);

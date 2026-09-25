@@ -18,6 +18,11 @@ The root is a private npm workspace.
 `extensions/mikoto-web/` provides authenticated OpenAI web-search capabilities
 for Garden commands and bundles the `web` skill.
 
+`extensions/mikoto-mcp/` provides cached MCP discovery through `mcp_tool_search`
+and host execution through Garden's `/mcp/call`, with the short `mcp` skill.
+`/mcp` and `/mcp:verbose` inspect catalogs using notifications only. See its
+README for configuration, host-authority implications, and temporary media.
+
 `skills/plan/` provides `/skill:plan <task>` for conversational planning
 with a Markdown deliverable. It does not add a persistent mode or an
 implementation handoff command. See its README for setup and usage.

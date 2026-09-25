@@ -1,0 +1,34 @@
+{
+  "name": "mikoto-mcp",
+  "version": "0.1.0",
+  "description": "Mikoto MCP: cached tool discovery and bounded host execution through Garden.",
+  "type": "module",
+  "license": "MIT",
+  "keywords": ["pi-package", "pi-extension"],
+  "scripts": {
+    "check": "tsc --noEmit",
+    "test": "node --test test/*.spec.ts",
+    "validate": "npm run check && npm test"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.1",
+    "zod": "^4.0.0"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "typebox": "*"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "0.87.1",
+    "@types/node": "^24.0.0",
+    "mikoto-types": "file:../../shared/mikoto-types",
+    "typebox": "^1.3.7",
+    "typescript": "^5.9.0"
+  },
+  "files": ["index.ts", "src", "skills", "README.md"],
+  "pi": {
+    "extensions": ["./index.ts"],
+    "skills": ["./skills"]
+  },
+  "engines": { "node": ">=26" }
+}
