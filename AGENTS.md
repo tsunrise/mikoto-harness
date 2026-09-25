@@ -1,9 +1,9 @@
 # Mikoto Harness
 
-This is a mono-repo of multiple Pi extensions and shared libraries. Some
-extensions bundle related Pi skills. All extension and shared-library packages
-have brand name "Mikoto" to differentiate them from similar packages outside
-the repo.
+This is a mono-repo of multiple Pi extensions, standalone skills, and shared
+libraries. Some extensions bundle related Pi skills. All extension and
+shared-library packages have brand name "Mikoto" to differentiate them from
+similar packages outside the repo.
 
 ## Repo Tree Structure
 
@@ -11,8 +11,8 @@ the repo.
   subdirectory.
 - All shared libraries live in the `shared` directory, with one package per
   subdirectory.
-- Skills tied to an extension live in that extension's `skills` directory. Do
-  not create a top-level `skills` directory.
+- Skills tied to an extension live in that extension's `skills` directory.
+- Standalone skills live in the top-level `skills` directory.
 
 The root `package.json` uses npm workspaces `extensions/*` and `shared/*`.
 Install dependencies from the repository root. Keep package-local scripts so a

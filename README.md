@@ -1,6 +1,6 @@
 # Mikoto Harness: An opinionated agent setup for Pi
 
-This repository contains extension packages and shared libraries for
+This repository contains extension packages, standalone skills, and shared libraries for
 [Pi Coding Agent](https://pi.dev/) that serve as building blocks for my
 personal agent system *Mikoto*. Some extension packages bundle Pi skills.
 
@@ -8,6 +8,8 @@ personal agent system *Mikoto*. Some extension packages bundle Pi skills.
 
 - `extensions/*` contains independently installable Pi extension packages,
   including any skills bundled with those extensions.
+- `skills/*` contains standalone Pi skills (configure Pi's `skills` setting
+  to point to this directory).
 - `shared/*` contains declaration-only or runtime libraries shared by
   extensions.
 
@@ -16,9 +18,9 @@ The root is a private npm workspace.
 `extensions/mikoto-web/` provides authenticated OpenAI web-search capabilities
 for Garden commands and bundles the `web` skill.
 
-`extensions/mikoto-plan/` provides `/plan` and `/lgtm` for conversational
-planning with a Markdown deliverable. Load it alongside `mikoto-question`;
-see its README for command semantics and advisory research/cleanup rules.
+`skills/plan/` provides `/skill:plan <task>` for conversational planning
+with a Markdown deliverable. It does not add a persistent mode or an
+implementation handoff command. See its README for setup and usage.
 
 `extensions/mikoto-vscode-context/` captures the active VS Code file and
 selections for Pi prompts, with `/vscode toggle` and `/vscode preview`.
