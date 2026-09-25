@@ -119,6 +119,29 @@ test("exit/output during a yielded handoff, previews, cancellation, and queued p
   });
 });
 
+test("a job is not reachable by ID until its initial delivery is ACKed; IDs are not sequential", async () => {
+  await fixture(async ({ manager, spawn, poll }) => {
+    const pending = spawn("/bin/cat", true);
+    while (!manager.list().jobs.length) await new Promise((resolve) => setTimeout(resolve, 10));
+    const [undisclosed] = manager.list().jobs;
+    await assert.rejects(poll(undisclosed.id), /Unknown or expired/);
+    const live = await pending;
+    assert.equal(live.job.id, undisclosed.id);
+    assert.equal(live.yielded, true);
+    manager.ack(live.job.id, live.chunk);
+
+    const next = await spawn("true");
+    assert.notEqual(next.job.id, live.job.id + 1);
+    manager.ack(next.job.id, next.chunk);
+
+    await manager.get(live.job.id).process.write("", true, new AbortController().signal);
+    const done = await poll(live.job.id);
+    assert.equal(done.output, "");
+    manager.ack(done.job.id, done.chunk);
+    assert.deepEqual(manager.list().jobs, []);
+  });
+});
+
 test("an aborted wait preserves the disclosed job and final output", async () => {
   await fixture(async ({ manager, spawn, poll }) => {
     const live = await spawn("/bin/cat", true);
@@ -207,6 +230,9 @@ test("uncollected completion is not silently evicted; collection frees bounded c
       const result = await spawn("printf unseen");
       ids.push(result.job.id);
       await manager.cancel(result.request!);
+      // Stand in for a yielded result whose ID was returned before the job
+      // finished unseen; only returned IDs are reachable by later polls.
+      manager.get(result.job.id).job.disclosed = true;
     }
     const oldest = manager.get(ids[0]);
     oldest.job.ended = Date.now() - 60 * 60_000;
@@ -255,9 +281,15 @@ test("retired jobs do not delete referenced omission logs, including header-only
 
 test("released omission reservations do not pin logs; ordinary collection refunds retained-byte quota", async () => {
   await fixture(async ({ manager, spawn, poll, dir }) => {
-    const cancelled = await spawn("printf recovered", false, 0);
+    const live = await spawn("/bin/cat", true);
+    manager.ack(live.job.id, live.chunk);
+    const entry = manager.get(live.job.id);
+    await entry.process.write("recovered", true, new AbortController().signal);
+    await entry.process.finished;
+    const cancelled = await poll(live.job.id, 0);
+    assert.ok(cancelled.omitted > 0);
     await manager.cancel(cancelled.request!);
-    const result = await poll(cancelled.job.id);
+    const result = await poll(live.job.id);
     assert.equal(result.output, "recovered");
     manager.ack(result.job.id, result.chunk);
     await assert.rejects(stat(result.log), { code: "ENOENT" });

@@ -36,6 +36,8 @@ const MAX_INPUT_WAIT_MS = 30_000;
 // wait returns as soon as the process is reaped.
 const STOP_COLLECT_WAIT_MS = 1_000;
 const LIST_COMMAND_CHARS = 200;
+const SESSION_ID_DESCRIPTION =
+  "Managed ID from a returned exec_command result, never an OS PID. IDs are random; do not guess or call this in parallel with the exec_command that creates it";
 export const EXEC_DEFAULT_YIELD_MS = MIN_POLL_WAIT_MS;
 export const ExecInput = z
   .strictObject({
@@ -128,6 +130,13 @@ function parse<T>(schema: z.ZodType<T>, value: unknown): T {
     );
   }
   return parsed.data;
+}
+// Tools may target only jobs whose ID an exec_command result has returned.
+// Undisclosed jobs belong to an exec_command call still in flight.
+async function disclosedJob(runtime: ToolRuntime, id: number, signal: AbortSignal): Promise<Job> {
+  const job = (await runtime.client.request("list", { id }, 10000, signal)).jobs[0];
+  if (!job?.disclosed) throw new Error("Unknown or expired managed session ID");
+  return job;
 }
 export type ToolRuntime = {
   generation: string;
@@ -380,7 +389,7 @@ export function registerGardenTools(
     promptSnippet: "Poll or send pipe input/EOF/interrupt to a managed command",
     parameters: Type.Object(
       {
-        session_id: Type.Integer({ minimum: 1, description: "Managed ID, never an OS PID" }),
+        session_id: Type.Integer({ minimum: 1, description: SESSION_ID_DESCRIPTION }),
         chars: Type.Optional(
           Type.String({
             description:
@@ -420,8 +429,7 @@ export function registerGardenTools(
         targetLifetime.signal,
         ...(callerSignal ? [callerSignal] : []),
       ]);
-      const job = (await runtime.client.request("list", { id: input.session_id }, 10000, signal))
-        .jobs[0];
+      const job = await disclosedJob(runtime, input.session_id, signal);
       const mutation = operation.kind !== "poll";
       const elevated = mutation && job.mode === "unsandboxed";
       if (elevated !== (input.justification !== undefined)) {
@@ -496,7 +504,7 @@ export function registerGardenTools(
     promptSnippet: "Terminate a hung or unneeded managed command and collect its final output",
     parameters: Type.Object(
       {
-        session_id: Type.Integer({ minimum: 1, description: "Managed ID, never an OS PID" }),
+        session_id: Type.Integer({ minimum: 1, description: SESSION_ID_DESCRIPTION }),
         max_output_tokens: Type.Optional(Type.Integer({ minimum: 0 })),
         justification: Type.Optional(
           Type.String({
@@ -516,8 +524,7 @@ export function registerGardenTools(
         targetLifetime.signal,
         ...(callerSignal ? [callerSignal] : []),
       ]);
-      const job = (await runtime.client.request("list", { id: input.session_id }, 10000, signal))
-        .jobs[0];
+      const job = await disclosedJob(runtime, input.session_id, signal);
       if ((job.mode === "unsandboxed") !== (input.justification !== undefined)) {
         throw new Error("Justification is required only for unsandboxed commands");
       }

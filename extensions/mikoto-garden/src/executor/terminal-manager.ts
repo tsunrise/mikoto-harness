@@ -20,7 +20,10 @@ export class TerminalManager {
   private readonly entries = new Map<number, Entry>();
   private readonly quota: LogQuota = { bytes: 0 };
   private readonly retiredWarnings = new Set<string>();
-  private nextId = randomInt(1, 2 ** 40);
+  // Session IDs are unpredictable, never sequential. A model that guesses the
+  // next ID (e.g. by issuing write_stdin in parallel with exec_command) must
+  // not reach a job whose ID was never returned to it.
+  private readonly issued = new Set<number>();
   private starting = 0;
   private closing = false;
   private readonly sandbox: Sandbox;
@@ -45,6 +48,14 @@ export class TerminalManager {
     const entry = this.entries.get(id);
     if (!entry) throw new Error("Unknown or expired managed session ID");
     return entry;
+  }
+  private allocateId(): number {
+    // Never reuse an ID in this generation: retired jobs may keep their logs.
+    let id: number;
+    do id = randomInt(1, 2 ** 40);
+    while (this.issued.has(id));
+    this.issued.add(id);
+    return id;
   }
   private snapshot(entry: Entry): Job {
     return {
@@ -107,7 +118,7 @@ export class TerminalManager {
       await assertLaunchIdentity(launch);
       signal.throwIfAborted();
       assertCurrent();
-      const id = this.nextId++;
+      const id = this.allocateId();
       output = new OutputStore(join(this.logs, `${id}.log`), this.quota);
       const job: Job = {
         id,
@@ -166,6 +177,9 @@ export class TerminalManager {
     capabilities: boolean,
   ): Promise<Delivery> {
     const entry = this.get(data.id);
+    // Until exec_command's own delivery is ACKed, its ID has not been returned
+    // and that delivery does not hold the queue. Disclosure is monotonic.
+    if (!entry.job.disclosed) throw new Error("Unknown or expired managed session ID");
     const previous = entry.queue;
     let unlock!: () => void;
     entry.queue = new Promise<void>((resolve) => {

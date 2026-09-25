@@ -257,6 +257,19 @@ test("stop_command rejects a justification mismatch before signalling", async ()
   }
 });
 
+test("write_stdin and stop_command cannot target a job whose ID exec_command has not returned", async () => {
+  for (const [name, args] of [
+    ["write_stdin", { session_id: 123 }],
+    ["write_stdin", { session_id: 123, chars: "data" }],
+    ["stop_command", { session_id: 123 }],
+  ] as const) {
+    const h = fixture(undefined, { job: { disclosed: false } });
+    await assert.rejects(h.execute(name, args), /Unknown or expired/);
+    assert.deepEqual(h.requests.map(({ method }) => method), ["list"]);
+    assert.deepEqual(h.collected, []);
+  }
+});
+
 test("list_commands reports one row per command whose session ID was returned", async () => {
   const base: Job = {
     id: 0, mode: "sandboxed", state: "running", cmd: "sleep 1\nsleep 2",
