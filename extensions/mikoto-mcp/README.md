@@ -7,17 +7,39 @@ pi install ./extensions/mikoto-mcp
 ```
 
 Install Garden alongside it to execute tools. `mcp_tool_search`, `/mcp`, and
-`/mcp:verbose` work without Garden. Search needs no skill: submit
-`{"queries":[{"query":"browser screenshot","limit":3},{"query":"forum topics","server":"discourse"}]}`.
-Each of the 1–8 queries has its own matches, limit (default 5, maximum 20), and
-server statuses. Duplicate queries remain separate results. Only load the
-bundled `mcp` skill after finding a tool to execute.
+`/mcp:verbose` work without Garden. Neither search nor describe needs a skill.
+Only load the bundled `mcp` skill after choosing a tool to execute.
+
+Discovery has two stages, so full schemas are only paid for when needed:
+
+1. **Search.** `{"queries":[{"query":"browser screenshot","limit":3},{"query":"forum topics","server":"discourse"}]}`
+   takes 1–8 queries, each with its own limit (default 8, maximum 20). Matches are
+   compact lines in rank order, with a server label whenever the server changes:
+   `name(required: type, optional?: type) — first sentence of the description`.
+   A tool already shown for an earlier query is listed by name only. Servers
+   that aren't ready (pending, cached, disabled) are listed once at the top.
+2. **Describe.** `{"describe":[{"server":"browser","name":"takeScreenshot"}]}`
+   takes 1–8 exact tools and returns each one's full description, annotations and
+   input schema (compact JSON, without `$schema`). `outputSchema` is omitted.
+   Unavailable tools get an error code (`unknown_server`, `unknown_tool`,
+   `unsupported_tool`, `server_disabled`, `unsupported_auth`, `catalog_pending`).
+   Both fields can be combined in one call.
+
+Signatures are a lossy view, so lines end with `[+]` when the omitted detail
+probably matters. That's structural loss (objects nested more than two levels,
+enums with more than 8 values, `$ref`/`allOf`, signatures over 400 characters),
+any parameter description over 150 characters, or more than 600 characters of
+description beyond the summary. On the cf-portal catalog, a line averages
+~52 tokens against ~380 for a describe block. The server still validates
+arguments, so a wrong guess comes back as an ordinary tool error.
 
 Search uses deterministic BM25 over server/tool names, titles, descriptions and
 nested input property metadata. It splits camelCase and Unicode identifiers;
 there are no wildcards, embeddings or schema `$ref` fetches. No matches is a
-normal result; rephrase keywords. Large results become private JSON reports
-with per-query pointers; read the report for complete, untruncated schemas.
+normal result; rephrase keywords. Output over 48 KiB or 2,000 lines becomes a
+private text report; read its path for the complete result. Tool details hold
+only names and statuses. Metadata is rendered on single lines with control
+characters stripped, except describe keeps a description's line breaks.
 
 ## Configuration and host authority
 

@@ -42,14 +42,17 @@ export const callSchema = z.strictObject({
   arguments: z.custom<Record<string, unknown>>(boundedArguments).default({}),
 });
 export type CallRequest = z.input<typeof callSchema>;
+export const searchLimit = 8;
 export const queriesSchema = z.strictObject({
   queries: z.array(z.strictObject({
     query: z.string().trim().min(1).max(2000),
-    limit: z.number().int().min(1).max(20).default(5),
+    limit: z.number().int().min(1).max(20).default(searchLimit),
     server: serverName.optional(),
-  })).min(1).max(8),
-});
-export type Query = z.infer<typeof queriesSchema>["queries"][number];
+  })).min(1).max(8).optional(),
+  describe: z.array(z.strictObject({ server: serverName, name: toolName })).min(1).max(8).optional(),
+}).refine(v => v.queries || v.describe);
+export type Query = NonNullable<z.infer<typeof queriesSchema>["queries"]>[number];
+export type Target = NonNullable<z.infer<typeof queriesSchema>["describe"]>[number];
 
 // Serialize in bounded chunks rather than allocating an oversized batch string.
 // Network/config inputs are JSON; the ancestor set also protects injected callers.

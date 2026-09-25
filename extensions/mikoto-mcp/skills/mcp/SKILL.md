@@ -6,8 +6,9 @@ description: Execute an MCP tool already discovered by mcp_tool_search through t
 # Execute a discovered MCP tool
 
 Resolve `scripts/mcp.mjs` relative to this skill directory and run its
-**absolute path** through `exec_command`, using the server and tool names and
-the input schema returned by `mcp_tool_search`:
+**absolute path** through `exec_command`, using the server name, tool name and
+signature returned by `mcp_tool_search`. If the line ends in `[+]`, get the full
+schema first with `mcp_tool_search` `describe`:
 
 ```sh
 node /absolute/path/to/mcp/scripts/mcp.mjs SERVER TOOL '{"arg":"value"}'

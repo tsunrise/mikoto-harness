@@ -4,7 +4,7 @@ import { Cache } from "./cache.ts";
 import { createAdapter, type Adapter, type AdapterFactory } from "./client.ts";
 import { defaultCacheDir, defaultConfigPath, loadConfig, type ConfigEntry } from "./config.ts";
 import { budget, McpError, wait } from "./errors.ts";
-import { callable, callSchema, compare, encodeJson, freeze, MiB, validateTools, type CallRequest, type Query, type ServerSnapshot } from "./schema.ts";
+import { callable, callSchema, compare, encodeJson, freeze, MiB, validateTools, type CallRequest, type Query, type ServerSnapshot, type Target } from "./schema.ts";
 import { SearchIndex } from "./search.ts";
 
 function deferred() {
@@ -173,21 +173,41 @@ export class Manager {
     return [...this.servers.values()].filter(s => server === undefined || s.server === server)
       .sort((a, b) => compare(a.server, b.server));
   }
-  async search(queries: Query[], caller?: AbortSignal) {
+  // Wait for selected servers that have no catalog yet. The deadline yields a
+  // partial point-in-time view; caller/navigation abort is a normal Pi
+  // cancellation, not a fabricated successful result.
+  private async catalogs<T>(caller: AbortSignal | undefined, select: () => Server[], view: () => T): Promise<T> {
     const timer = budget([this.lifetime.signal, this.operations.signal, ...(caller ? [caller] : [])], this.options.searchMs ?? 55_000);
     const signal = timer.signal;
     try {
       await wait(this.bootstrap, signal);
       this.assertAvailable();
-      const selected = new Set(queries.flatMap(q => this.select(q.server)));
       try {
-        await wait(Promise.all([...selected].filter(s => !s.snapshot).map(s => s.discovery.promise)), signal);
+        await wait(Promise.all(select().filter(s => !s.snapshot).map(s => s.discovery.promise)), signal);
       } catch {
-        // Deadline returns a partial point-in-time result; caller/navigation abort
-        // is still a normal Pi cancellation, not a fabricated successful search.
         if (!(signal.reason instanceof McpError && signal.reason.code === "call_timeout")) throw signal.reason;
       }
       this.assertAvailable();
+      return view();
+    } finally { timer.dispose(); }
+  }
+  describe(targets: Target[], caller?: AbortSignal) {
+    const select = () => [...new Set(targets.map(t => this.servers.get(t.server)).filter(s => s !== undefined))];
+    return this.catalogs(caller, select, () => targets.map(({ server, name }) => {
+      const s = this.servers.get(server);
+      if (!s) return { server, name, error: "unknown_server" };
+      if (s.state === "disabled" || s.state === "skipped")
+        return { server, name, error: s.reason === "unsupported_auth" ? "unsupported_auth" : "server_disabled" };
+      if (!s.snapshot) return { server, name, error: "catalog_pending" };
+      const tool = s.snapshot.tools.find(t => t.name === name);
+      if (!tool) return { server, name, error: "unknown_tool" };
+      if (!callable(tool)) return { server, name, error: "unsupported_tool" };
+      return { server, name, tool };
+    }));
+  }
+  search(queries: Query[], caller?: AbortSignal) {
+    const select = () => [...new Set(queries.flatMap(q => this.select(q.server)))];
+    return this.catalogs(caller, select, () => {
       const results = queries.map((query, index) => {
         const servers = this.select(query.server);
         const snapshots = servers.filter(s => s.state !== "disabled" && s.state !== "skipped" && s.snapshot).map(s => s.snapshot!);
@@ -212,7 +232,7 @@ export class Manager {
         };
       });
       return { results, callRouteBound: this.callRouteBound };
-    } finally { timer.dispose(); }
+    });
   }
 
   call(input: CallRequest, caller: AbortSignal) {

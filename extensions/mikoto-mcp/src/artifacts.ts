@@ -152,11 +152,11 @@ export class ArtifactStore {
     });
   }
 
-  report(json: string, signal: AbortSignal): Promise<FileReference> {
-    const bytes = Buffer.byteLength(json);
+  report(text: string, signal: AbortSignal): Promise<FileReference> {
+    const bytes = Buffer.byteLength(text);
     if (bytes > this.limits.report) throw new McpError("search_result_too_large");
     const reservation = this.reserve(bytes, 1);
-    return this.transaction(reservation, signal, write => write("search.json", "application/json", json));
+    return this.transaction(reservation, signal, write => write("search.txt", "text/plain", text));
   }
 
   prepare(result: CallToolResult) {
