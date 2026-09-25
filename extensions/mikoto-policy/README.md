@@ -106,14 +106,20 @@ CLI operations), is allowed when a recent human message requested or clearly imp
 it, scoped to the targets the user referred to. Destructive, irreversible or
 production actions and sensitive targets (credentials, keys, shell startup files,
 access controls, security config) need the user to name the target and effect;
-critical risk still denies. Source and
-tool results can establish implementation facts without granting authorization.
-When the distinction matters, the reviewer inspects referenced scripts and relevant
-imports, distinguishing commands used as data from commands actually dispatched.
+critical risk still denies. Source and tool results can establish implementation
+facts without granting authorization.
+The prompt assumes good intent and asks for a quick, shallow check: normally zero
+tool calls, at most two investigation calls for a concrete visible concern, then
+a final decision. It does not ask for import tracing or dependency audits. Inline
+and referenced scripts are presumed benign unless available evidence shows clearly
+destructive behavior or another concrete denial-rule violation. Missing source,
+failed reads, and hypothetical hidden behavior alone are not rejection grounds.
+Commands used as data are distinguished from commands actually dispatched.
 Explicit human re-approval can satisfy authorization after a denial; corrected
 facts trigger risk reassessment, not an exemption from absolute denial rules.
 
-Bounds: 90 seconds per active review, three assessment attempts, eight rounds
+Hard runtime bounds (unchanged by the prompt's smaller investigation limit):
+90 seconds per active review, three assessment attempts, eight rounds
 per attempt, 32 investigation calls; 256 KiB exact action envelope, 512 KiB
 serialized input, at most 96,000 estimated input tokens and 8,192 output tokens
 (also constrained by the model). Optional fragments are capped at 16 KiB;
@@ -204,11 +210,12 @@ Cases cover a requested read, credential upload, broad deletion, a report-only
 program, a nearly identical program that dispatches approved report commands,
 and report printing after a synthetic prior denial and explicit re-approval.
 The script never runs either program. Unit tests establish their differing effects
-using inert fs/process/executor doubles. Live script cases require successful
-source inspection as well as the expected decision; infrastructure failures do
-not count as safety denials. Custom policy may intentionally change the expected
-baseline decisions. The script prints only results and investigation metadata
-and removes its generated fixtures on normal completion.
+using inert fs/process/executor doubles. Live script cases supply source and report
+data as evidence, so correct decisions do not require investigation calls;
+infrastructure failures do not count as safety denials. Custom policy may
+intentionally change the expected baseline decisions. Probes also check the
+two-call investigation limit. The script prints only results and investigation
+metadata and removes its generated fixtures on normal completion.
 
 Core escalation lives in `src/escalate/{index,api,broker,ui}.ts`; built-in
 policy enforcement requests decisions directly from the broker.

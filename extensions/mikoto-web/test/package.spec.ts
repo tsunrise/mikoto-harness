@@ -15,7 +15,8 @@ test("packed package loads its extension and skill through Pi and executes its h
   const directory = await mkdtemp(join(tmpdir(), "web-package-test-"));
   try {
     const packed = await run("npm", ["pack", "--ignore-scripts", "--json", "--pack-destination", directory], { cwd: root });
-    const [{ filename }] = JSON.parse(packed.stdout);
+    // npm 12 keys pack results by package name; older versions used an array.
+    const [{ filename }] = Object.values(JSON.parse(packed.stdout)) as { filename: string }[];
     await run("tar", ["-xzf", join(directory, filename), "-C", directory]);
     // This stands in for installed runtime dependencies. The extension imports
     // only zod at runtime, and no install scripts or real credentials are used.
