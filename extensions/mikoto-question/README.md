@@ -2,7 +2,6 @@
 
 Mikoto Question is a Pi extension that adds OpenAI Codex's
 `request_user_input` tool contract and an interactive terminal questionnaire.
-It also provides a turn-scoped Do not disturb mode.
 
 ## Install
 
@@ -100,38 +99,6 @@ is loaded, this plays an attention sound immediately before the user-facing UI
 appears. The event is fire-and-forget, so questionnaires behave identically
 when the sound extension is absent.
 
-## Do not disturb
-
-Toggle DND with:
-
-```text
-/toggle-do-not-disturb
-```
-
-While active:
-
-- Every `request_user_input` call returns a recoverable error telling the model
-  that the user is temporarily unavailable and to make reasonable assumptions.
-- No questionnaire opens.
-
-Each state change adds a transcript message:
-
-```text
-Do not disturb mode is on
-Do not disturb mode is off
-```
-
-These messages are UI-only custom entries and are never sent to the LLM. DND
-automatically turns off at Pi's next `turn_end`, which adds the `off` message.
-Before the next user-started agent run, the extension separately adds one hidden
-custom-role context message saying that the user is available again.
-
-If DND is turned on after a turn ends but before the next turn starts, it stays
-on and the pending availability message is deferred while the current state is
-on. If it is manually turned off again before submitting, the current state is
-off and the completed turn's pending availability message is emitted. Toggles
-after a turn ends do not alter whether that completed turn used DND.
-
 ## Development
 
 ```bash
@@ -144,4 +111,4 @@ npm run validate
 ```
 
 The tests cover the Codex-compatible schema and response, questionnaire state
-and rendering, DND lifecycle and UI messages, and extension integration.
+and rendering, and extension integration.

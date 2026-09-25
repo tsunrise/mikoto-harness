@@ -1,20 +1,5 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { Text } from "@earendil-works/pi-tui";
 import type { MikotoEventEmitter } from "mikoto-types";
-import {
-	DND_AVAILABILITY_MESSAGE,
-	DND_AVAILABILITY_MESSAGE_TYPE,
-	DND_STATE_ENTRY_TYPE,
-	DND_UI_ENTRY_TYPE,
-	DND_UI_ENTRY_TYPES,
-	DND_UNAVAILABLE_ERROR,
-	consumeAvailabilityNotice,
-	dndUiMessage,
-	endDndTurn,
-	initialDndState,
-	restoreDndState,
-	toggleDnd,
-} from "./dnd-state.ts";
 import { RequestUserInputComponent } from "./questionnaire-component.ts";
 import {
 	type RequestUserInputParams,
@@ -26,7 +11,6 @@ import {
 	renderRequestResult,
 } from "./result-renderer.ts";
 import type {
-	DndState,
 	QuestionnaireOutcome,
 	RequestUserInputDetails,
 	RequestUserInputQuestion,
@@ -38,45 +22,7 @@ const TUI_UNAVAILABLE_ERROR =
 	"request_user_input requires Pi's interactive TUI and is unavailable in this mode";
 
 export default function mikotoQuestion(pi: ExtensionAPI): void {
-	let dndState = initialDndState();
 	const events: MikotoEventEmitter = pi.events;
-
-	function persistDndState(): void {
-		pi.appendEntry(DND_STATE_ENTRY_TYPE, { ...dndState });
-	}
-
-	function appendDndUiMessage(enabled: boolean): void {
-		pi.appendEntry(DND_UI_ENTRY_TYPE, { enabled });
-	}
-
-	function replaceDndState(next: DndState): void {
-		const changed = !sameDndState(dndState, next);
-		const enabledChanged = dndState.enabled !== next.enabled;
-		dndState = next;
-		if (changed) persistDndState();
-		if (enabledChanged) appendDndUiMessage(dndState.enabled);
-	}
-
-	for (const entryType of DND_UI_ENTRY_TYPES) {
-		pi.registerEntryRenderer<{ enabled: boolean }>(
-			entryType,
-			(entry, _options, theme) => {
-				if (typeof entry.data?.enabled !== "boolean") return undefined;
-				return new Text(
-					theme.fg("muted", dndUiMessage(entry.data.enabled)),
-					1,
-					0,
-				);
-			},
-		);
-	}
-
-	pi.registerCommand("toggle-do-not-disturb", {
-		description: "Toggle Do not disturb mode for request_user_input",
-		handler: async () => {
-			replaceDndState(toggleDnd(dndState));
-		},
-	});
 
 	pi.registerTool<typeof requestUserInputSchema, RequestUserInputDetails>({
 		name: "request_user_input",
@@ -87,9 +33,6 @@ export default function mikotoQuestion(pi: ExtensionAPI): void {
 		executionMode: "sequential",
 
 		async execute(_toolCallId, params, signal, _onUpdate, ctx) {
-			if (dndState.enabled) {
-				throw new Error(DND_UNAVAILABLE_ERROR);
-			}
 			validateRequestUserInputParams(params);
 			if (ctx.mode !== "tui") {
 				throw new Error(`${TUI_UNAVAILABLE_ERROR}: ${ctx.mode}`);
@@ -159,31 +102,6 @@ export default function mikotoQuestion(pi: ExtensionAPI): void {
 		},
 	});
 
-	pi.on("turn_end", async () => {
-		replaceDndState(endDndTurn(dndState));
-	});
-
-	pi.on("before_agent_start", async () => {
-		const consumed = consumeAvailabilityNotice(dndState);
-		if (!consumed.shouldNotify) return;
-		dndState = consumed.state;
-		persistDndState();
-		return {
-			message: {
-				customType: DND_AVAILABILITY_MESSAGE_TYPE,
-				content: DND_AVAILABILITY_MESSAGE,
-				display: false,
-			},
-		};
-	});
-
-	pi.on("session_start", async (_event, ctx) => {
-		dndState = restoreDndState(ctx.sessionManager.getBranch());
-	});
-
-	pi.on("session_tree", async (_event, ctx) => {
-		dndState = restoreDndState(ctx.sessionManager.getBranch());
-	});
 }
 
 function cloneQuestions(params: RequestUserInputParams): RequestUserInputQuestion[] {
@@ -198,17 +116,7 @@ function cloneQuestions(params: RequestUserInputParams): RequestUserInputQuestio
 	}));
 }
 
-function sameDndState(left: DndState, right: DndState): boolean {
-	return (
-		left.enabled === right.enabled &&
-		left.enabledSinceLastTurnEnd === right.enabledSinceLastTurnEnd &&
-		left.availabilityNoticePending === right.availabilityNoticePending
-	);
-}
-
 export {
-	DND_AVAILABILITY_MESSAGE,
-	DND_UNAVAILABLE_ERROR,
 	REQUEST_CANCELLED_ERROR,
 	TUI_UNAVAILABLE_ERROR,
 };

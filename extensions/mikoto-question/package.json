@@ -1,7 +1,7 @@
 {
   "name": "mikoto-question",
   "version": "0.1.0",
-  "description": "Mikoto Question: a Codex-compatible request_user_input tool for Pi with a terminal questionnaire and Do not disturb mode.",
+  "description": "Mikoto Question: a Codex-compatible request_user_input tool for Pi with a terminal questionnaire.",
   "keywords": [
     "pi-package",
     "pi-extension",

@@ -24,12 +24,6 @@ export interface RequestUserInputDetails {
 	response: RequestUserInputResponse;
 }
 
-export interface DndState {
-	enabled: boolean;
-	enabledSinceLastTurnEnd: boolean;
-	availabilityNoticePending: boolean;
-}
-
 export type QuestionnaireFocus = "options" | "notes" | "unanswered-confirmation";
 
 export interface QuestionnaireAnswerState {

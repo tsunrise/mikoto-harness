@@ -8,12 +8,9 @@ import type {
 } from "@earendil-works/pi-coding-agent";
 import type { TUI } from "@earendil-works/pi-tui";
 import {
-	DND_AVAILABILITY_MESSAGE,
-	DND_UNAVAILABLE_ERROR,
 	TUI_UNAVAILABLE_ERROR,
 	default as mikotoQuestion,
 } from "../src/index.ts";
-import { DND_UI_ENTRY_TYPE } from "../src/dnd-state.ts";
 import type { RequestUserInputParams } from "../src/schema.ts";
 import type {
 	QuestionnaireOutcome,
@@ -40,56 +37,17 @@ interface CapturedTool {
 	}>;
 }
 
-interface CapturedCommand {
-	handler(args: string, ctx: ExtensionContext): Promise<void>;
-}
-
-type CapturedHandler = (
-	event: unknown,
-	ctx: ExtensionContext,
-) => Promise<unknown>;
-
 type EmittedEvent = { channel: string; data: unknown };
 
 function setupExtension(onEmit?: (event: EmittedEvent) => void): {
 	tool: CapturedTool;
-	command: CapturedCommand;
-	handlers: Map<string, CapturedHandler>;
-	entries: Array<{ customType: string; data: unknown }>;
 	events: EmittedEvent[];
-	entryRenderer: (
-		entry: { data?: unknown },
-		options: { expanded: boolean },
-		theme: typeof plainTheme,
-	) => { render(width: number): string[] } | undefined;
 } {
 	let tool: CapturedTool | undefined;
-	let command: CapturedCommand | undefined;
-	let entryRenderer:
-		| ((
-				entry: { data?: unknown },
-				options: { expanded: boolean },
-				theme: typeof plainTheme,
-		  ) => { render(width: number): string[] } | undefined)
-		| undefined;
-	const handlers = new Map<string, CapturedHandler>();
-	const entries: Array<{ customType: string; data: unknown }> = [];
 	const events: EmittedEvent[] = [];
 	const api = {
 		registerTool(value: unknown) {
 			tool = value as CapturedTool;
-		},
-		registerCommand(_name: string, value: unknown) {
-			command = value as CapturedCommand;
-		},
-		registerEntryRenderer(_customType: string, renderer: unknown) {
-			entryRenderer = renderer as typeof entryRenderer;
-		},
-		on(name: string, handler: unknown) {
-			handlers.set(name, handler as CapturedHandler);
-		},
-		appendEntry(customType: string, data: unknown) {
-			entries.push({ customType, data });
 		},
 		events: {
 			emit(channel: string, data: unknown) {
@@ -105,9 +63,7 @@ function setupExtension(onEmit?: (event: EmittedEvent) => void): {
 
 	mikotoQuestion(api);
 	assert.ok(tool);
-	assert.ok(command);
-	assert.ok(entryRenderer);
-	return { tool, command, handlers, entries, events, entryRenderer };
+	return { tool, events };
 }
 
 function makeContext(
@@ -319,87 +275,4 @@ describe("extension integration", () => {
 		assert.deepEqual(events, []);
 	});
 
-	it("shows UI-only DND messages, rejects calls, resets, and injects one LLM notice", async () => {
-		const {
-			tool,
-			command,
-			handlers,
-			entries,
-			events,
-			entryRenderer,
-		} = setupExtension();
-		const { ctx } = makeContext();
-		await command.handler("", ctx);
-		const onEntry = entries.find(
-			(entry) =>
-				entry.customType === DND_UI_ENTRY_TYPE &&
-				(entry.data as { enabled?: boolean }).enabled === true,
-		);
-		assert.ok(onEntry);
-		const onRendered = entryRenderer(
-			{ data: onEntry.data },
-			{ expanded: false },
-			plainTheme,
-		)?.render(80).join("\n");
-		assert.ok(onRendered?.trim());
-
-		await assert.rejects(
-			tool.execute("call-1", params, undefined, undefined, ctx),
-			new RegExp(DND_UNAVAILABLE_ERROR.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
-		);
-		assert.deepEqual(events, []);
-
-		await handlers.get("turn_end")?.({}, ctx);
-		const offEntry = entries.find(
-			(entry) =>
-				entry.customType === DND_UI_ENTRY_TYPE &&
-				(entry.data as { enabled?: boolean }).enabled === false,
-		);
-		assert.ok(offEntry);
-		const offRendered = entryRenderer(
-			{ data: offEntry.data },
-			{ expanded: false },
-			plainTheme,
-		)?.render(80).join("\n");
-		assert.ok(offRendered?.trim());
-		assert.notEqual(offRendered, onRendered);
-
-		const first = (await handlers.get("before_agent_start")?.(
-			{},
-			ctx,
-		)) as
-			| { message?: { content?: string; display?: boolean; customType?: string } }
-			| undefined;
-		assert.equal(first?.message?.content, DND_AVAILABILITY_MESSAGE);
-		assert.equal(first?.message?.display, false);
-		assert.match(first?.message?.customType ?? "", /dnd-availability/);
-		const second = await handlers.get("before_agent_start")?.({}, ctx);
-		assert.equal(second, undefined);
-		assert.ok(entries.length >= 3);
-	});
-
-	it("keeps DND on when re-enabled between turns and defers the availability message", async () => {
-		const { tool, command, handlers } = setupExtension();
-		const { ctx } = makeContext();
-
-		await command.handler("", ctx);
-		await handlers.get("turn_end")?.({}, ctx);
-		await command.handler("", ctx);
-
-		const deferred = await handlers.get("before_agent_start")?.({}, ctx);
-		assert.equal(deferred, undefined);
-		await assert.rejects(
-			tool.execute("call-1", params, undefined, undefined, ctx),
-			new RegExp(
-				DND_UNAVAILABLE_ERROR.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
-			),
-		);
-
-		await handlers.get("turn_end")?.({}, ctx);
-		const nextTurn = (await handlers.get("before_agent_start")?.(
-			{},
-			ctx,
-		)) as { message?: { content?: string } } | undefined;
-		assert.equal(nextTurn?.message?.content, DND_AVAILABILITY_MESSAGE);
-	});
 });
