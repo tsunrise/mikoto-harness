@@ -34,7 +34,7 @@ const identity = async (path) => {
 };
 try {
   await request("init", {
-    contract: "garden-pipes-2", runtimeParent: cwd,
+    contract: "garden-pipes-3", runtimeParent: cwd,
     policy: {
       filesystem: { denyRead: [], allowRead: [], allowWrite: [cwd], denyWrite: [] },
       network: { allowedDomains: [], deniedDomains: ["*"], allowLocalBinding: false, allowUnixSockets: [] },
@@ -44,7 +44,7 @@ try {
   const result = await request("spawn", {
     launch: {
       cmd: "printf packed-ok", cwd, shell, login: false, stdin: false,
-      mode: "sandboxed", env, cwdIdentity: await identity(cwd), shellIdentity: await identity(shell), capabilities: false,
+      mode: "sandboxed", env, cwdIdentity: await identity(cwd), shellIdentity: await identity(shell),
     },
     wait: 1000, tokens: 1000,
   });

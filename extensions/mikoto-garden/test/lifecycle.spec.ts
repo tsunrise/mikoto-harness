@@ -4,16 +4,14 @@ import { mkdir, mkdtemp, realpath, rm, access, writeFile, readFile } from "node:
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test, mock } from "node:test";
-import type { ExtensionAPI, ExtensionContext, ExtensionCommandContext, ToolDefinition } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionToolContext, ExtensionCommandContext, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import type { MikotoPolicy, MikotoPolicyEscalateEvent } from "mikoto-types";
 import garden from "../src/index.ts";
-import { CapabilityServer } from "../src/capability-server.ts";
 import { ExecutorClient } from "../src/executor-client.ts";
 import { shellQuote } from "../src/launch.ts";
-import { renderGardenPrompt } from "../src/prompt.ts";
 import type { Delivery } from "../src/protocol.ts";
 
-type Hook = (event: Record<string, unknown>, ctx: ExtensionContext) => unknown | Promise<unknown>;
+type Hook = (event: Record<string, unknown>, ctx: ExtensionToolContext) => unknown | Promise<unknown>;
 async function fixture(body: (h: Awaited<ReturnType<typeof harness>>) => Promise<void>) {
   const parent = fileURLToPath(new URL("../test-runtime/", import.meta.url));
   await mkdir(parent, { recursive: true });
@@ -40,7 +38,7 @@ async function harness(dir: string) {
     cwd: dir, mode: "tui", hasUI: true, thinkingLevel: "off",
     sessionManager: { getSessionId: () => "fixture", getSessionFile: () => undefined },
     ui: { notify: (text: string) => notices.push(text), setStatus() {} },
-  } as unknown as ExtensionContext;
+  } as unknown as ExtensionToolContext;
   const pi = {
     events: {
       emit: bus.emit.bind(bus),
@@ -66,8 +64,10 @@ async function harness(dir: string) {
   bus.on("mikoto-policy:get-policy", (event) => event.callback(policy));
   garden(pi);
   const emit = async (name: string, event: Record<string, unknown> = {}) => {
+    if (name === "before_agent_start") event.systemPromptOptions = { sections: {} };
     const results = [];
     for (const hook of hooks.get(name) ?? []) results.push(await hook(event, ctx));
+    if (name === "before_agent_start") return event.systemPromptOptions;
     return results;
   };
   const exec = (args: Record<string, unknown>, signal?: AbortSignal) => tools.get("exec_command")!.execute("fixture", args, signal, undefined, ctx);
@@ -79,7 +79,7 @@ test("real tool ACK retires jobs but preserves formatter-only omission logs; gen
   await fixture(async (h) => {
     await h.emit("session_start");
     const ps = async () => {
-      await h.commands.get("ps")!.handler("", { ...h.ctx, mode: "rpc" } as ExtensionCommandContext);
+      await h.commands.get("ps")!.handler("", { ...h.ctx, mode: "rpc" } as unknown as ExtensionCommandContext);
       return h.notices.at(-1)!;
     };
     const input = (session_id: number) => h.tools.get("write_stdin")!.execute("collect", { session_id }, undefined, undefined, h.ctx);
@@ -103,26 +103,22 @@ test("real tool ACK retires jobs but preserves formatter-only omission logs; gen
     await assert.rejects(access(details.log), { code: "ENOENT" }, "normal generation teardown still removes runtime logs");
   });
 });
-test("capability startup failure preserves both execution modes and stable prompt", { skip: process.platform !== "darwin", timeout: 30000 }, async () => {
+test("both execution modes preserve stable guidance and disable model bash", { skip: process.platform !== "darwin", timeout: 30000 }, async () => {
   await fixture(async (h) => {
-    let starts = 0;
-    mock.method(CapabilityServer, "start", async () => { starts++; return undefined; });
     h.bus.on("mikoto-policy:escalate", (event: MikotoPolicyEscalateEvent) => {
       if (event.claim()) void event.callback({ decision: "approve" });
     });
     await h.emit("session_start");
-    assert.equal(starts, 1);
     assert.deepEqual(h.active(), ["read", "exec_command", "write_stdin", "other"]);
     assert.equal(h.hooks.has("user_bash"), false);
     const prompt = await h.emit("before_agent_start", { systemPrompt: "<sandbox>Existing unrelated guidance</sandbox>" });
     for (const sandbox_permissions of ["use_default", "require_escalated"]) {
       const result = await h.exec({
-        cmd: 'test -z "${GARDEN_TOKEN+x}" && test -z "${GARDEN_SERVER+x}" && printf no-capabilities',
+        cmd: "printf fixture-output",
         login: false, sandbox_permissions,
         ...(sandbox_permissions === "require_escalated" ? { justification: "Fixture host environment check" } : {}),
       });
       const text = result.content[0].type === "text" ? result.content[0].text : "";
-      assert.match(text, /Capabilities: unavailable/);
       assert.match(text, /Process exited with code 0/);
     }
     assert.deepEqual(await h.emit("before_agent_start", { systemPrompt: "<sandbox>Existing unrelated guidance</sandbox>" }), prompt);
@@ -132,50 +128,36 @@ test("capability startup failure preserves both execution modes and stable promp
     assert.equal((await h.emit("tool_call", { toolName: "bash" }) as { block: boolean }[])[0].block, true);
   });
 });
-test("server loss revokes capabilities without stopping jobs; tree rotation retires IDs", { skip: process.platform !== "darwin", timeout: 30000 }, async () => {
+test("tree rotation cancels pending approval and retires managed IDs", { skip: process.platform !== "darwin", timeout: 30000 }, async () => {
   await fixture(async (h) => {
-    const start = CapabilityServer.start.bind(CapabilityServer);
-    let retire!: () => void;
-    mock.method(CapabilityServer, "start", async (...[registry, lost]: Parameters<typeof CapabilityServer.start>) => {
-      const server = await start(registry, lost);
-      retire = () => { server!.stopAdmitting(); lost(); };
-      return server;
-    });
     await h.emit("session_start");
-    const initialPrompt = await h.emit("before_agent_start", { systemPrompt: "" });
-    const sleeper = await h.exec({ cmd: "/bin/cat", stdin: true, login: false, yield_time_ms: 0 });
-    const jobId = (sleeper.details as { job: { id: number } }).job.id;
-    let approve!: () => void;
+    const sleeper = await h.exec({ cmd: "/bin/cat", stdin: true, login: false });
+    const jobId = (sleeper.details as Delivery).job.id;
     let entered!: () => void;
+    let approve!: () => void;
     const approvalEntered = new Promise<void>((resolve) => { entered = resolve; });
     h.bus.on("mikoto-policy:escalate", (event: MikotoPolicyEscalateEvent) => {
       if (!event.claim()) return;
-      approve = () => { void event.callback({ decision: "approve" }); }; entered();
+      approve = () => { void event.callback({ decision: "approve" }); };
+      entered();
     });
     const marker = join(h.dir, "must-not-spawn");
-    const pending = h.exec({
-      cmd: `touch ${shellQuote(marker)}`, login: false, sandbox_permissions: "require_escalated", justification: "Fixture race",
-    });
+    const pending = assert.rejects(h.exec({
+      cmd: `touch ${shellQuote(marker)}`, login: false,
+      sandbox_permissions: "require_escalated", justification: "Fixture race",
+    }));
     await approvalEntered;
-    retire();
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    approve();
-    await assert.rejects(pending, /capability availability changed/i);
-    await assert.rejects(access(marker));
-    const nextStart = await h.emit("before_agent_start", { systemPrompt: "" });
-    assert.deepEqual(nextStart, initialPrompt);
-    assert.equal(h.hooks.has("context"), false, "Garden must not replace/remove messages between model requests");
-    const result = await h.exec({ cmd: 'test -z "${GARDEN_TOKEN+x}" && printf fresh', login: false });
-    assert.match(result.content[0].type === "text" ? result.content[0].text : "", /Capabilities: unavailable/);
     await h.emit("session_tree");
-    await assert.rejects(h.tools.get("write_stdin")!.execute("old", { session_id: jobId }, undefined, undefined, h.ctx), /Unknown or expired/);
+    approve();
+    await pending;
+    await assert.rejects(access(marker));
+    await assert.rejects(h.tools.get("write_stdin")!.execute("old", { session_id: jobId }, undefined, undefined, h.ctx));
   });
 });
 test("agent starts inject only stable guidance, never job messages or discovery requests", { skip: process.platform !== "darwin", timeout: 30000 }, async () => {
   await fixture(async (h) => {
     await h.emit("session_start");
     const baseline = await h.emit("before_agent_start", { systemPrompt: "Base prompt" });
-    assert.deepEqual(baseline, [{ systemPrompt: `Base prompt\n\n${renderGardenPrompt(h.policy.document())}` }, undefined]);
     await h.exec({ cmd: "/bin/cat", stdin: true, login: false, yield_time_ms: 250 });
     await h.exec({ cmd: "printf completed", login: false });
     const requests = mock.method(ExecutorClient.prototype, "request");
@@ -201,10 +183,8 @@ test("workload-writable PATH cannot replace the wrapper's host env helper", { sk
     } finally { if (previousPath === undefined) delete process.env.PATH; else process.env.PATH = previousPath; }
   });
 });
-test("missing/invalid Policy still attempts capabilities but cannot dispatch or ask for escalation", async () => {
+test("missing/invalid Policy cannot dispatch or ask for escalation", async () => {
   await fixture(async (h) => {
-    let attempts = 0;
-    mock.method(CapabilityServer, "start", async () => { attempts++; return undefined; });
     h.bus.removeAllListeners("mikoto-policy:get-policy");
     h.bus.on("mikoto-policy:escalate", () => assert.fail("Invalid Policy must not enter approval"));
     for (const broken of [undefined, { ...h.policy, diagnostics() { throw new Error("Broken service"); } }]) {
@@ -222,14 +202,12 @@ test("missing/invalid Policy still attempts capabilities but cannot dispatch or 
         /no valid policy snapshot/i,
       );
     }
-    assert.equal(attempts, 2);
   });
 });
 test("failed initialization reports retained-artifact warnings before discarding its client", {
   skip: process.platform !== "darwin", timeout: 5000,
 }, async () => {
   await fixture(async (h) => {
-    mock.method(CapabilityServer, "start", async () => undefined);
     const request = ExecutorClient.prototype.request;
     const close = ExecutorClient.prototype.close;
     mock.method(ExecutorClient.prototype, "request", async function (
@@ -251,13 +229,9 @@ test("failed initialization reports retained-artifact warnings before discarding
 });
 test("duplicate event-bus facades cannot acquire a second session generation", async () => {
   await fixture(async (h) => {
-    let starts = 0;
     h.bus.removeAllListeners("mikoto-policy:get-policy");
-    mock.method(CapabilityServer, "start", async () => { starts++; return undefined; });
     garden({ ...h.pi, events: { ...h.pi.events } });
     await assert.rejects(h.emit("session_start"), /Duplicate/);
-    assert.equal(starts, 1);
     await assert.rejects(h.emit("session_tree"), /Duplicate/);
-    assert.equal(starts, 2);
   });
 });

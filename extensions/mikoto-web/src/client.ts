@@ -5,7 +5,8 @@ import { WebError } from "./errors.ts";
 
 export const RESPONSE_LIMIT = 100 * 1024 * 1024;
 export type Fetch = typeof globalThis.fetch;
-export type SearchResult = { output: string; results: unknown[] | null };
+type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
+export type SearchResult = { output: string; results: Json[] | null };
 
 export function searchSessionId(sessionId: string, provider: Provider): string {
   return createHash("sha256").update(`mikoto-web:v1\n${sessionId}\n${provider}`).digest("hex");
@@ -69,7 +70,7 @@ export function parseResult(text: string): SearchResult {
 export async function search(
   request: { sessionId: string; model: string; commands: Commands; auth: WebAuth; signal: AbortSignal },
   options: { fetch?: Fetch; timeoutMs?: number; responseLimit?: number } = {},
-): Promise<string> {
+): Promise<SearchResult> {
   const timeout = new AbortController();
   const timer = setTimeout(() => timeout.abort(), options.timeoutMs ?? 55_000);
   const signal = AbortSignal.any([request.signal, timeout.signal]);
@@ -94,8 +95,8 @@ export async function search(
       }
       throw new WebError(response.status === 429 ? "rate_limited" : "upstream_error", response.status);
     }
-    const body = JSON.stringify(parseResult(await readResponse(response, signal, limit)));
-    if (Buffer.byteLength(body) > limit) throw new WebError("response_too_large");
+    const body = parseResult(await readResponse(response, signal, limit));
+    if (Buffer.byteLength(JSON.stringify(body)) > limit) throw new WebError("response_too_large");
     signal.throwIfAborted();
     return body;
   } catch (error) {

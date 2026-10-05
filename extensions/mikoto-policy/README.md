@@ -178,7 +178,7 @@ From the Mikoto Harness root:
 npm run validate -w mikoto-policy
 ```
 
-The minimum/development baseline is Pi **0.87.1**. Tests cover real SDK
+The minimum/development baseline is Pi **1.0.2**. Tests cover real SDK
 integration and built-in interception as well as broker/UI races.
 For a no-operation real-TUI smoke test, explicitly load
 `test/fixtures/escalation-smoke.ts` after this extension and run

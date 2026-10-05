@@ -21,7 +21,6 @@ let manager: TerminalManager | undefined;
 let root: string | undefined;
 let rootInode: number | undefined;
 let ready = false;
-let capabilities = false;
 let closing: Promise<{ warnings: string[] }> | undefined;
 let initializing: Promise<unknown> | undefined;
 const operations = new Map<number, AbortController>();
@@ -85,7 +84,7 @@ async function dispatch(request: Request): Promise<Responses[keyof Responses]> {
     const scratch = join(root, "scratch");
     await mkdir(control, { mode: 0o700 });
     await mkdir(scratch, { mode: 0o700 });
-    sandbox = new Sandbox(data.policy, control, scratch, data.endpoint);
+    sandbox = new Sandbox(data.policy, control, scratch);
     const diagnostics = await sandbox.initialize();
     signal.throwIfAborted();
     manager = new TerminalManager(
@@ -95,7 +94,6 @@ async function dispatch(request: Request): Promise<Responses[keyof Responses]> {
       (job) => send({ generation: generation!, event: "exit", job }),
       (id, delivery) => send({ generation: generation!, event: "progress", id, delivery }),
     );
-    capabilities = !!data.endpoint;
     ready = true;
     return { diagnostics };
   }
@@ -103,11 +101,6 @@ async function dispatch(request: Request): Promise<Responses[keyof Responses]> {
   if (!ready || !manager || !sandbox) throw new Error("Command executor unavailable");
   if (request.method === "preflight") {
     await sandbox.checkReady();
-    return null;
-  }
-  if (request.method === "revoke") {
-    sandbox.revoke();
-    capabilities = false;
     return null;
   }
   if (request.method === "cancel") {
@@ -140,17 +133,10 @@ async function dispatch(request: Request): Promise<Responses[keyof Responses]> {
       if (!["sandboxed", "unsandboxed"].includes(data.launch.mode)) {
         throw new Error("Invalid launch mode");
       }
-      if (data.launch.capabilities !== capabilities) {
-        throw new Error("Capability availability changed before spawn");
-      }
-      return manager.spawn(data, request.id, signal, () => {
-        if (data.launch.capabilities !== capabilities) {
-          throw new Error("Capability availability changed before spawn");
-        }
-      });
+      return manager.spawn(data, request.id, signal);
     }
     case "input":
-      return manager.input(request.data as Requests["input"], request.id, signal, capabilities);
+      return manager.input(request.data as Requests["input"], request.id, signal);
     case "ack": {
       const data = request.data as Requests["ack"];
       manager.ack(data.id, data.chunk, data.preserveLog);

@@ -9,7 +9,6 @@ import { Box, Container, Text, wrapTextWithAnsi, truncateToWidth } from "@earend
 import { z } from "zod";
 import { CONTRACT, type Job, type Responses } from "./protocol.ts";
 import type { ToolRuntime } from "./tools.ts";
-import type { Endpoint } from "./capability-server.ts";
 import { boundedText, sanitize, OUTPUT_LIMITS } from "./executor/output-store.ts";
 import { ProcessPicker, compactJob, jobDetail } from "./process-picker.ts";
 
@@ -26,7 +25,6 @@ const Details = z.object({
   omitted: z.number().nonnegative().finite(),
   log: z.string().max(4096),
   logCapped: z.boolean(),
-  capabilities: z.boolean(),
 });
 type DisplayDetails = z.infer<typeof Details>;
 type RowKind = "command" | "stop";
@@ -133,7 +131,6 @@ class CommandRow {
       const hints = [
         `${(data.wall_ms / 1000).toFixed(2)}s`,
         status,
-        ...(!data.capabilities ? ["capabilities unavailable"] : []),
         ...(data.omitted ? [`${data.omitted} bytes omitted`] : []),
         ...(data.omitted || data.logCapped
           ? [`log: ${sanitize(data.log)}${data.logCapped ? " (capped)" : ""}`]
@@ -237,7 +234,6 @@ export function registerGardenCommands(
   runtime: () => ToolRuntime | undefined,
   status: () => string,
   ui: GardenPresentation,
-  endpoint: () => Endpoint | undefined,
 ): void {
   async function inspect(args: string, command: string) {
     const value = args.trim();
@@ -330,22 +326,19 @@ export function registerGardenCommands(
     },
   });
   pi.registerCommand("ps:debug", {
-    description: "Mikoto Garden debug snapshot, including the capability bearer token (TUI only)",
+    description: "Mikoto Garden executor and job diagnostics (TUI only)",
     async handler(args, ctx) {
       ui.setContext(ctx);
-      // A credential-bearing diagnostic belongs in an explicit, transient
-      // local view, never a notification, saved session entry, or model message.
+      // Keep verbose diagnostics in a transient view rather than adding them
+      // to the conversation or interrupting it with a large notification.
       if (ctx.mode !== "tui") {
         ui.notify("Garden /ps:debug requires the interactive TUI.", "warning");
         return;
       }
       const { current, result, problem } = await inspect(args, "ps:debug");
-      const address = endpoint();
       const text = boundedDisplay(
         [
           `Status: ${status()}`,
-          `GARDEN_SERVER: ${address?.url ?? "(unavailable)"}`,
-          `GARDEN_TOKEN: ${address?.token ?? "(unavailable)"}`,
           `Generation: ${current?.generation ?? "(no executor)"}`,
           `Executor IPC: ${current?.client.available ? "connected" : "unavailable"}`,
           `Generation cancelled: ${current?.lifetime.signal.aborted ?? false}`,
@@ -363,7 +356,6 @@ export function registerGardenCommands(
                 JSON.stringify(result!.jobs, null, 2),
               ]),
           ...(result?.tail ? [`Output tail (non-consuming):\n${result.tail}`] : []),
-          "Snapshot only. Credentials may become stale after server loss or a generation change.",
         ].join("\n"),
         64 * 1024,
       );
@@ -380,10 +372,6 @@ export function registerGardenCommands(
               offset = Math.min(offset, lastOffset);
               return [
                 theme.fg("accent", theme.bold("Mikoto Garden debug — snapshot")),
-                theme.fg(
-                  "warning",
-                  "Contains bearer credentials. Do not share or record this view.",
-                ),
                 ...lines.slice(offset, offset + pageSize()),
                 theme.fg(
                   "dim",

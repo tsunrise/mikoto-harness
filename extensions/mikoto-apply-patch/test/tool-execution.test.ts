@@ -10,7 +10,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { it } from "node:test";
-import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionToolContext } from "@earendil-works/pi-coding-agent";
 
 import { createApplyPatchTool } from "../src/tool.ts";
 
@@ -23,7 +23,7 @@ const compatibleContext = (cwd: string) =>
       id: "gpt-5.6",
       compat: { supportsOpenAIGrammarTools: true },
     },
-  }) as unknown as ExtensionContext;
+  }) as unknown as ExtensionToolContext;
 
 it("checks every prepared target before native application", async (t) => {
   const root = await mkdtemp(

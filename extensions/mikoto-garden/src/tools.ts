@@ -7,7 +7,6 @@ import { StringEnum } from "@earendil-works/pi-ai";
 import { Type } from "typebox";
 import { z } from "zod";
 import type { MikotoEventEmitter } from "mikoto-types";
-import type { Endpoint } from "./capability-server.ts";
 import { prepareLaunch, assertLaunchIdentity } from "./launch.ts";
 import { authorize, inputAction, launchAction, stopAction } from "./permissions.ts";
 import {
@@ -20,6 +19,7 @@ import {
 import type { ExecutorClient } from "./executor-client.ts";
 import { boundedText } from "./executor/output-store.ts";
 import { gardenRenderers } from "./ui.ts";
+import { commandOutputSchema, jobListOutputSchema } from "./output-schema.ts";
 
 const integer = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 const reason = z
@@ -142,7 +142,6 @@ export type ToolRuntime = {
   generation: string;
   lifetime: AbortController;
   client: ExecutorClient;
-  endpoint: () => Endpoint | undefined;
   approvals: Map<number, Set<AbortController>>;
 };
 export function formatResult(delivery: Delivery) {
@@ -164,7 +163,6 @@ export function formatResult(delivery: Delivery) {
       status,
       `Managed session ID: ${job.id}`,
       `Sandbox mode: ${job.mode}`,
-      ...(!delivery.capabilities ? ["Capabilities: unavailable"] : []),
       ...(omitted
         ? [`Warning: ${omitted} output bytes omitted (including sanitized controls).`]
         : []),
@@ -196,6 +194,19 @@ export function formatResult(delivery: Delivery) {
   return {
     content: [{ type: "text" as const, text: header + output }],
     details: { ...delivery, output, omitted },
+    structuredContent: {
+      session_id: job.id,
+      output,
+      running: delivery.yielded,
+      exit_code: job.exit_code,
+      exit_signal: job.exit_signal,
+      sandbox_mode: job.mode,
+      wall_time_seconds: delivery.wall_ms / 1000,
+      truncated: omitted > 0,
+      omitted_bytes: omitted,
+      ...(omitted || delivery.logCapped ? { full_output_path: delivery.log } : {}),
+      log_capped: delivery.logCapped,
+    },
   };
 }
 function metadata(ctx: ExtensionContext): Record<string, string | undefined> {
@@ -237,7 +248,7 @@ export function registerGardenTools(
       // handoffs, however, are accepted once the response arrives; cancellation
       // cannot undo delivered input or retroactively cancel that handoff.
       if (method === "spawn") signal.throwIfAborted();
-      const response = formatResult({ ...result, capabilities: !!runtime.endpoint() });
+      const response = formatResult(result);
       // Ack means accepted for tool return, not proof of model receipt.
       await runtime.client.request("ack", {
         id: result.job.id,
@@ -285,6 +296,7 @@ export function registerGardenTools(
   }
   pi.registerTool({
     name: "exec_command",
+    outputSchema: commandOutputSchema,
     label: "Execute Command",
     description:
       "Run a fresh macOS sandboxed shell. Wait up to 10 seconds by default; if it is still running, return the same process as a live managed session. Pipes only; no tty. Output is capped at 50 KiB/2,000 lines.",
@@ -335,7 +347,6 @@ export function registerGardenTools(
         runtime.lifetime.signal,
         ...(callerSignal ? [callerSignal] : []),
       ]);
-      const endpoint = runtime.endpoint();
       await runtime.client.request("preflight", {}, 10000, signal);
       const jobs = await runtime.client.request("list", {}, 10000, signal);
       if (
@@ -349,13 +360,13 @@ export function registerGardenTools(
           `Outstanding-command capacity (${JOB_LIMITS.outstanding}) reached; collect completed commands with write_stdin`,
         );
       }
-      const launch = await prepareLaunch(input, ctx.cwd, metadata(ctx), endpoint);
+      const launch = await prepareLaunch(input, ctx.cwd, metadata(ctx));
       if (launch.mode === "unsandboxed") {
         await authorize(events, id, launchAction(launch), input.justification!, signal);
       }
       signal.throwIfAborted();
-      if (current() !== runtime || runtime.endpoint() !== endpoint) {
-        throw new Error("Generation or capability availability changed; nothing spawned");
+      if (current() !== runtime) {
+        throw new Error("Generation changed; nothing spawned");
       }
       await assertLaunchIdentity(launch);
       // Clamp at the public tool boundary, including arguments changed by a
@@ -383,6 +394,7 @@ export function registerGardenTools(
   });
   pi.registerTool({
     name: "write_stdin",
+    outputSchema: commandOutputSchema,
     label: "Manage Command",
     description:
       "Wait for a managed command and collect unread output without sending input (omit chars), or deliver UTF-8 pipe input/EOF. Returned output is consumed; /ps previews are not. Exact Ctrl-C interrupts; use stop_command to terminate a command. Unsandboxed mutations require fresh approval; output-only waits do not.",
@@ -474,6 +486,7 @@ export function registerGardenTools(
   });
   pi.registerTool({
     name: "list_commands",
+    outputSchema: jobListOutputSchema,
     label: "List Commands",
     description:
       "List managed commands that are still running or have uncollected output, with session ID, sandbox mode, state, elapsed time, unread output bytes, and command.",
@@ -493,11 +506,23 @@ export function registerGardenTools(
       return {
         content: [{ type: "text" as const, text: formatJobList(visible) }],
         details: { jobs: visible },
+        structuredContent: {
+          jobs: visible.map((job) => ({
+            session_id: job.id,
+            sandbox_mode: job.mode,
+            state: job.state,
+            command: job.cmd,
+            unread_bytes: job.unread,
+            exit_code: job.exit_code,
+            exit_signal: job.exit_signal,
+          })),
+        },
       };
     },
   });
   pi.registerTool({
     name: "stop_command",
+    outputSchema: commandOutputSchema,
     label: "Stop Command",
     description:
       "Terminate a managed command and its process group (SIGTERM, then SIGKILL), then return its final unread output. Use for hung commands or commands no longer needed. A command that already exited is collected without signalling. Stopping an unsandboxed command requires fresh approval.",

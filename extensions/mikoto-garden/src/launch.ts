@@ -2,7 +2,6 @@ import { access, realpath, stat } from "node:fs/promises";
 import { constants } from "node:fs";
 import { userInfo } from "node:os";
 import { basename, isAbsolute, resolve } from "node:path";
-import type { Endpoint } from "./capability-server.ts";
 
 export type SandboxMode = "sandboxed" | "unsandboxed";
 export type ShellKind = "bash" | "zsh" | "sh";
@@ -17,7 +16,6 @@ export type Launch = Readonly<{
   env: Readonly<Record<string, string>>;
   cwdIdentity: string;
   shellIdentity: string;
-  capabilities: boolean;
 }>;
 export function withScratchEnvironment(launch: Launch, scratch: string): Launch {
   return Object.freeze({
@@ -31,7 +29,6 @@ export function shellQuote(text: string): string {
 export function safeEnvironment(
   inherited: NodeJS.ProcessEnv = process.env,
   metadata: Readonly<Record<string, string | undefined>> = {},
-  endpoint?: Endpoint,
 ): Record<string, string> {
   const account = userInfo();
   const env: Record<string, string> = {
@@ -63,10 +60,6 @@ export function safeEnvironment(
   }
   env.AI_AGENT = "pi";
   env.PI_CODING_AGENT = "true";
-  if (endpoint) {
-    env.GARDEN_SERVER = endpoint.url;
-    env.GARDEN_TOKEN = endpoint.token;
-  }
   return env;
 }
 async function identity(path: string): Promise<string> {
@@ -84,7 +77,6 @@ export async function prepareLaunch(
   },
   cwd: string,
   metadata: Readonly<Record<string, string | undefined>>,
-  endpoint?: Endpoint,
 ): Promise<Launch> {
   const workdir = await realpath(resolve(cwd, args.workdir ?? "."));
   if (!(await stat(workdir)).isDirectory()) throw new Error("workdir must be a directory");
@@ -124,10 +116,9 @@ export async function prepareLaunch(
     login: args.login ?? true,
     stdin: args.stdin ?? false,
     mode: args.sandbox_permissions === "require_escalated" ? "unsandboxed" : "sandboxed",
-    env: Object.freeze(safeEnvironment(process.env, metadata, endpoint)),
+    env: Object.freeze(safeEnvironment(process.env, metadata)),
     cwdIdentity: await identity(workdir),
     shellIdentity: await identity(shell),
-    capabilities: !!endpoint,
   });
 }
 export async function assertLaunchIdentity(launch: Launch): Promise<void> {

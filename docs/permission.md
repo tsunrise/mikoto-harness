@@ -213,9 +213,8 @@ arguments on other tools.
 Policy's `<permission>` block owns the effective filesystem **and network**
 snapshot, with network enforcement explicitly scoped to sandboxed Garden
 commands. Garden's short `<sandbox>` block refers to that section rather than
-duplicating policy JSON; capability workflows belong in bundled, on-demand
-skills. Describe the live capability endpoint exception symbolically, never
-by injecting its address or bearer token.
+duplicating policy JSON. Host-side Pi tools use the normal tool pipeline;
+calling them from codemode must preserve validation and permission hooks.
 
 Escalation interrupts the user. Encourage the model to work within current
 permissions and request exceptions infrequently, without suggesting a bypass
@@ -240,7 +239,7 @@ Garden additionally requires `policy.diagnostics()` and rejects invalid or
 unreadable selected layers and failed canonical rules, even when native file
 evaluation retains its existing fallback snapshot. Optional absence and
 untrusted-workspace skipping are benign. Its network document remains pinned;
-the ephemeral capability endpoint exception belongs to Garden, not Policy.
+Garden enforces that snapshot without adding destination exceptions.
 
 Run TypeScript checks for the consumer, `mikoto-policy`, and `mikoto-types`.
 For UI or lifecycle changes, also perform a real Pi TUI smoke test.

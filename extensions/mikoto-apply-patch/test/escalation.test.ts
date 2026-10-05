@@ -4,7 +4,7 @@ import { mkdtemp, realpath, readFile, writeFile, rm, access } from "node:fs/prom
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it, mock } from "node:test";
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionToolContext } from "@earendil-works/pi-coding-agent";
 import type { MikotoEventEmitter, MikotoPolicy, MikotoPolicyEscalateEvent } from "mikoto-types";
 import { installApplyPatchPolicy, requestEscalation } from "../src/policy.ts";
 import { createApplyPatchTool } from "../src/tool.ts";
@@ -154,7 +154,7 @@ describe("whole prepared patch authorization", () => {
       const tool = createApplyPatchTool(h.guard);
       const ctx = { cwd, model: {
         api: "openai-responses", compat: { supportsOpenAIGrammarTools: true },
-      } } as unknown as ExtensionContext;
+      } } as unknown as ExtensionToolContext;
       const patch = "*** Begin Patch\n*** Update File: source\n*** Move to: destination\n@@\n-old\n+new\n*** End Patch";
       let approve = false;
       h.bus.on("mikoto-policy:escalate", (event: MikotoPolicyEscalateEvent) => {

@@ -26,6 +26,7 @@ export default function mikotoQuestion(pi: ExtensionAPI): void {
 
 	pi.registerTool<typeof requestUserInputSchema, RequestUserInputDetails>({
 		name: "request_user_input",
+    exposure: "model-only",
 		label: "Question",
 		description:
 			"Request user input for one to three short questions and wait for the response.",

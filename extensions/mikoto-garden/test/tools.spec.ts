@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { AgentToolUpdateCallback, ExtensionAPI, ExtensionContext, ToolDefinition } from "@earendil-works/pi-coding-agent";
+import type { AgentToolUpdateCallback, ExtensionAPI, ExtensionToolContext, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import type { Delivery, Job, Requests } from "../src/protocol.ts";
 import { registerGardenTools, type ToolRuntime } from "../src/tools.ts";
 
@@ -20,11 +20,11 @@ function fixture(onRequest: (method: keyof Requests) => void = () => {}, options
   const delivery: Delivery = {
     job: { ...job, state: "exited", exit_code: 0, stdinOpen: false },
     chunk: "fixture", output: "done", omitted: 0, log: "/fixture/log",
-    logCapped: false, wall_ms: 1, yielded: false, capabilities: false, request: 99,
+    logCapped: false, wall_ms: 1, yielded: false, request: 99,
   };
   const runtime: ToolRuntime = {
     generation: "fixture", lifetime: new AbortController(),
-    endpoint: () => undefined, approvals: new Map(),
+    approvals: new Map(),
     client: {
       async request(method: keyof Requests, data: unknown, timeout?: number) {
         requests.push({ method, data, timeout });
@@ -45,7 +45,7 @@ function fixture(onRequest: (method: keyof Requests) => void = () => {}, options
   const ctx = {
     cwd: process.cwd(), thinkingLevel: "off",
     sessionManager: { getSessionId: () => "fixture", getSessionFile: () => undefined },
-  } as unknown as ExtensionContext;
+  } as unknown as ExtensionToolContext;
   const collected: number[] = [];
   registerGardenTools(pi, () => runtime, (id) => collected.push(id));
   return {
@@ -101,6 +101,35 @@ test("exec_command clamps public waits to 10–30 seconds without delaying compl
     assert.equal((result.details as Delivery).wall_ms, 1);
     assert.equal(h.requests.at(-1)!.method, "ack");
   }
+});
+
+test("command tools return structured status and bounded output without IPC bookkeeping", async () => {
+  for (const name of ["exec_command", "write_stdin", "stop_command"]) {
+    const h = fixture();
+    h.delivery.output = "fixture output";
+    h.delivery.omitted = 17;
+    h.delivery.job.exit_code = 7;
+    const result = await h.execute(name, name === "exec_command" ? { cmd: "true" } : { session_id: 123 });
+    assert.deepEqual(result.structuredContent, {
+      session_id: 123,
+      output: "fixture output",
+      running: false,
+      exit_code: 7,
+      exit_signal: null,
+      sandbox_mode: "sandboxed",
+      wall_time_seconds: 0.001,
+      truncated: true,
+      omitted_bytes: 17,
+      full_output_path: "/fixture/log",
+      log_capped: false,
+    });
+  }
+  const h = fixture();
+  h.delivery.yielded = true;
+  h.delivery.job.exit_code = null;
+  const result = await h.execute("exec_command", { cmd: "true" });
+  assert.equal((result.structuredContent as { running: boolean }).running, true);
+  assert.equal((result.structuredContent as { full_output_path?: string }).full_output_path, undefined);
 });
 
 test("write_stdin clamps every output-only poll spelling to 10–300 seconds", async () => {
@@ -285,6 +314,12 @@ test("list_commands reports one row per command whose session ID was returned", 
   const result = await h.execute("list_commands", {});
   assert.deepEqual(h.requests.map(({ method }) => method), ["list"]);
   assert.deepEqual((result.details as { jobs: Job[] }).jobs.map(({ id }) => id), [111111, 333333]);
+  assert.deepEqual(
+    (result.structuredContent as { jobs: { session_id: number; command: string }[] }).jobs.map(
+      ({ session_id, command }) => [session_id, command],
+    ),
+    [[111111, base.cmd], [333333, base.cmd]],
+  );
   const text = (result.content[0] as { text: string }).text;
   assert.equal(text.split("\n").length, 2);
   assert.match(text, /\b111111\b/);

@@ -36,7 +36,7 @@ async function fixture(body: (h: {
       }, ++request, signal),
       poll: (id, tokens = 10000, pollSignal = signal) => manager.input({
         id, operation: { kind: "poll", chars: "" }, wait: 1000, tokens,
-      }, ++request, pollSignal, false),
+      }, ++request, pollSignal),
     });
   } finally {
     assert.deepEqual((await manager.close()).warnings, warnings);

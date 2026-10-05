@@ -23,14 +23,12 @@ styling.
 `tui-smoke.exp` remains a no-model interaction smoke test. Its open/close
 markers come from the explicitly loaded `pi-fixture.ts`, not production UI
 strings. Stop and approval success are checked against actual tool results.
-Keep its redraw draining and disabled transcript logging: debug deliberately
-shows a live credential. One theme run is sufficient; the optional third
+Keep its redraw draining and disabled transcript logging. One theme run is sufficient; the optional third
 argument can still select a theme for manual inspection.
 
-The executor, manager, HTTP, lifecycle, RPC, skill, type, Gate 1 and packed
+The executor, manager, lifecycle, RPC, local IPC and packed
 executor fixtures cover distinct boundaries. Similar operations at those
-layers are not automatically redundant. Query-string rejection is covered by
-the raw HTTP framing test rather than repeated in the general HTTP smoke.
+layers are not automatically redundant.
 
 `tools.spec.ts` checks the public wait floor/caps at the dispatched-request
 boundary, without sleeping through each case. `executor-client.spec.ts` uses

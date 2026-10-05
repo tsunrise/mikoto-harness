@@ -14,7 +14,7 @@ test("network syntax is canonical, narrow, and deny-all is deny-only", () => {
     assert.equal(normalizeNetworkRule(value, false), undefined, value);
   }
   assert.equal(normalizeNetworkRule("*:443", true), "*:443");
-  assert.equal(MikotoPolicyConfig.safeParse({ capabilities: { enabled: true } }).success, false);
+  assert.equal(MikotoPolicyConfig.safeParse({ unknownSetting: { enabled: true } }).success, false);
 });
 test("network deltas normalize before merging and diagnostics distinguish load failures", async () => {
   const dir = await mkdtemp(join(tmpdir(), "garden-network-policy-"));

@@ -46,7 +46,7 @@ test("tool renderers keep terminal-control sequences inert", async () => {
     details: {
       job: { id: 123, mode: "sandboxed", exit_code: 0, exit_signal: null },
       yielded: false, output: "line\n\u001b]52;c;evil\u0007tail", omitted: 0, wall_ms: 500,
-      log: "/private/log", logCapped: false, capabilities: true,
+      log: "/private/log", logCapped: false,
     },
   }, { expanded: false, isPartial: false }, theme, context);
   const rendered = call.render(100).join("\n");

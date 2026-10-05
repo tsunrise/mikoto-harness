@@ -15,13 +15,9 @@ personal agent system *Mikoto*. Some extension packages bundle Pi skills.
 
 The root is a private npm workspace.
 
-`extensions/mikoto-web/` provides authenticated OpenAI web-search capabilities
-for Garden commands and bundles the `web` skill.
-
-`extensions/mikoto-mcp/` provides cached MCP discovery through `mcp_tool_search`
-and host execution through Garden's `/mcp/call`, with the short `mcp` skill.
-`/mcp` and `/mcp:verbose` inspect catalogs using notifications only. See its
-README for configuration, host-authority implications, and temporary media.
+`extensions/mikoto-web/` provides public web research through Pi's built-in
+codemode with deferred schema discovery and a stable model-facing tool set.
+It needs OpenAI credentials but works with any conversation provider.
 
 `skills/plan/` provides `/skill:plan <task>` for conversational planning
 with a Markdown deliverable. It does not add a persistent mode or an
@@ -57,6 +53,32 @@ npm run validate
 ```
 
 ## Extension Interoperability
+
+Use Pi 1.0.2 or later. Enable codemode before the first prompt:
+
+```json
+{
+  "defaultTools": ["+codemode"],
+  "codemode": { "mode": "on" }
+}
+```
+
+Keep frequently used tools directly available. Garden tools also return
+structured data to codemode for batching, filtering, and chaining calls;
+permission checks still run for each nested call. Interactive questions stay
+model-facing rather than callable from scripts.
+
+MCP is provided by Pi itself. Configure `mcpServers` in
+`~/.pi/agent/mcp.json` or a trusted project's `.pi/mcp.json`, and use `pi mcp`
+or `/mcp` for connection management. Use server exposure `"codemode"` (Pi's
+default), with a short configured `description`, for minimal initial context.
+Discover tools inside scripts with `searchTools()`, `describeTool()`, and
+`describeNamespace()`. Unlike `tool_search`, these do not activate tools or
+change the model-facing declarations. Avoid `"deferred"` MCP exposure and
+mid-session tool activation when cache stability matters.
+
+MCP tools and web run host-side, outside Garden's shell sandbox. Only configure
+trusted servers; sandbox network rules do not constrain their actions.
 
 - Some extensions in the repo require one or more extensions in the repo to be
   loaded first.

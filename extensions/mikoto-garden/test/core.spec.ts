@@ -4,11 +4,8 @@ import { mkdir, mkdtemp, realpath, rm, writeFile, symlink, stat } from "node:fs/
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
-import { z } from "zod";
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { BeforeAgentStartEvent, ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { MikotoEventEmitter, MikotoPolicyDocument, MikotoPolicyEscalateEvent } from "mikoto-types";
-import { CapabilityRegistry } from "../src/capability-registry.ts";
-import { CapabilityServer } from "../src/capability-server.ts";
 import { installGardenPrompt, renderGardenPrompt } from "../src/prompt.ts";
 import { evaluateDestination } from "../src/executor/network-policy.ts";
 import {
@@ -35,21 +32,21 @@ async function temporary<T>(run: (dir: string) => Promise<T>): Promise<T> {
   try { return await run(dir); }
   finally { await rm(dir, { recursive: true, force: true }); }
 }
-test("network precedence, malformed destinations, exact infrastructure grant and revocation", () => {
+test("network precedence, malformed destinations, loopback policy and closed runtime", () => {
   const net = document.network;
-  assert.equal(evaluateDestination(net, undefined, "example.com", 443), true);
-  assert.equal(evaluateDestination(net, undefined, "example.com", 80), false);
-  assert.equal(evaluateDestination(net, undefined, "x.example.org", 443), true);
-  assert.equal(evaluateDestination(net, undefined, "example.org", 443), false);
-  assert.equal(evaluateDestination(net, undefined, "private.example.org", 443), false);
+  assert.equal(evaluateDestination(net, "example.com", 443), true);
+  assert.equal(evaluateDestination(net, "example.com", 80), false);
+  assert.equal(evaluateDestination(net, "x.example.org", 443), true);
+  assert.equal(evaluateDestination(net, "example.org", 443), false);
+  assert.equal(evaluateDestination(net, "private.example.org", 443), false);
   for (const host of ["127.1", "0177.0.0.1", "::1", "localhost.", "evil\0.example.com", "example.com/"]) {
-    assert.equal(evaluateDestination(net, { port: 80 }, host, 80), false);
+    assert.equal(evaluateDestination(net, host, 80), false);
   }
   const denied = { allowedDomains: [], deniedDomains: ["*", "127.0.0.1", "127.0.0.1:80"], allowLocalBinding: false, allowUnixSockets: [] };
-  assert.equal(evaluateDestination(denied, { port: 80 }, "127.0.0.1", 80), true);
-  assert.equal(evaluateDestination(denied, { port: 80 }, "127.0.0.1", 81), false);
-  assert.equal(evaluateDestination(denied, undefined, "127.0.0.1", 80), false);
-  assert.equal(evaluateDestination(denied, { port: 80 }, "127.0.0.1", 80, false), false);
+  assert.equal(evaluateDestination({ ...denied, allowedDomains: ["127.0.0.1:80"] }, "127.0.0.1", 80), false);
+  assert.equal(evaluateDestination(denied, "127.0.0.1", 81), false);
+  assert.equal(evaluateDestination(denied, "127.0.0.1", 80), false);
+  assert.equal(evaluateDestination(denied, "127.0.0.1", 80, false), false);
 });
 test("compiled filesystem enforcement preserves alternating read rules and write-deny precedence", { skip: process.platform !== "darwin", timeout: 30000 }, async () => {
   await temporary(async (dir) => {
@@ -103,13 +100,13 @@ test("strict post-hook inputs, pipe classifications, environment and determinist
   assert.throws(() => classifyInput({ session_id: 1, chars: "\u0003", close_stdin: true }));
   assert.equal(EXEC_DEFAULT_YIELD_MS, 10_000);
   const env = safeEnvironment({
-    NODE_OPTIONS: "--import malicious", HTTPS_PROXY: "http://bad", GARDEN_TOKEN: "stale",
-    GARDEN_SERVER: "stale", PI_SESSION_ID: "stale", OPENAI_API_KEY: "secret", BASH_ENV: "bad",
+    NODE_OPTIONS: "--import malicious", HTTPS_PROXY: "http://bad",
+    PI_SESSION_ID: "stale", OPENAI_API_KEY: "secret", BASH_ENV: "bad",
     PATH: ":relative:/usr/bin", LANG: "en_US.UTF-8",
   }, { PI_SESSION_ID: "fresh" });
   assert.equal(env.PATH, "/usr/bin");
   assert.equal(env.PI_SESSION_ID, "fresh");
-  for (const key of ["GARDEN_TOKEN", "GARDEN_SERVER", "NODE_OPTIONS", "HTTPS_PROXY", "BASH_ENV", "OPENAI_API_KEY"]) assert.equal(env[key], undefined);
+  for (const key of ["NODE_OPTIONS", "HTTPS_PROXY", "BASH_ENV", "OPENAI_API_KEY"]) assert.equal(env[key], undefined);
   const prompt = renderGardenPrompt(document);
   assert.equal(prompt, renderGardenPrompt({ ...document, network: {
     ...document.network,
@@ -120,20 +117,22 @@ test("strict post-hook inputs, pipe classifications, environment and determinist
   assert.notEqual(renderGardenPrompt(), prompt);
   assert.deepEqual(document.network.allowedDomains, ["example.com", "*.example.org:443"]);
 });
-test("command guidance appends once, including when policy is unavailable", () => {
-  let handler!: (event: { systemPrompt: string }) => { systemPrompt: string } | undefined;
+test("command guidance updates only its own structured section and is idempotent", () => {
+  let handler!: (event: BeforeAgentStartEvent) => void;
   let current: MikotoPolicyDocument | undefined = document;
   installGardenPrompt({
     on(_event: string, fn: typeof handler) { handler = fn; },
   } as unknown as ExtensionAPI, () => current);
-  const previous = "<sandbox>Other guidance</sandbox>";
-  const available = handler({ systemPrompt: previous })!;
-  assert.equal(available.systemPrompt, `${previous}\n\n${renderGardenPrompt(document)}`);
-  assert.equal(handler(available), undefined);
+  const event = { systemPromptOptions: { sections: { fixture: "retained" } } } as unknown as BeforeAgentStartEvent;
+  handler(event);
+  const available = structuredClone(event.systemPromptOptions.sections);
+  handler(event);
+  assert.deepEqual(event.systemPromptOptions.sections, available);
+  assert.equal(available.fixture, "retained");
   current = undefined;
-  const unavailable = handler({ systemPrompt: previous })!;
-  assert.equal(unavailable.systemPrompt, `${previous}\n\n${renderGardenPrompt()}`);
-  assert.equal(handler(unavailable), undefined);
+  handler(event);
+  assert.notEqual(event.systemPromptOptions.sections.sandbox, available.sandbox);
+  assert.equal(event.systemPromptOptions.forceSystemPrompt, undefined);
 });
 test("scratch environment is shared by sandboxed and elevated launch modes", () => {
   const base = {
@@ -145,7 +144,6 @@ test("scratch environment is shared by sandboxed and elevated launch modes", () 
     env: Object.freeze({ PATH: "/usr/bin" }),
     cwdIdentity: "cwd",
     shellIdentity: "shell",
-    capabilities: false,
   };
   for (const mode of ["sandboxed", "unsandboxed"] as const) {
     const launch: Launch = Object.freeze({ ...base, mode });
@@ -193,42 +191,6 @@ test("ordinary denials preserve reasons without human attribution; failures reta
     }
   }
 });
-test("authenticated HTTP schema outputs, errors, routing and disposal", async () => {
-  const registry = new CapabilityRegistry();
-  let calls = 0;
-  const binding = registry.bind({
-    owner: "test", method: "POST", path: "/example",
-    bodySchema: z.strictObject({ count: z.number().default(2) }).transform(({ count }) => `parsed:${count}`),
-    async handler({ body }) { calls++; return { status: 200, body: body.toUpperCase() }; },
-  });
-  assert.ok(binding.ok);
-  assert.equal(registry.bind({
-    owner: "duplicate", method: "POST", path: "/example", bodySchema: z.any(),
-    async handler() { return { status: 204 }; },
-  }).ok, false);
-  registry.bind({
-    owner: "test", method: "GET", path: "/get", bodySchema: z.undefined(),
-    async handler({ body }) { assert.equal(body, undefined); return { status: 200, body: "get" }; },
-  });
-  const server = await CapabilityServer.start(registry, () => assert.fail("unexpected server failure"));
-  assert.ok(server?.endpoint);
-  const endpoint = server.endpoint;
-  const auth = { authorization: `Bearer ${endpoint.token}` };
-  try {
-    const url = `${endpoint.url}/example`;
-    assert.equal((await fetch(url, { method: "POST", body: "{}" })).status, 401);
-    assert.equal((await fetch(url, { method: "POST", headers: auth, body: "{}" })).status, 415);
-    assert.equal((await fetch(url, { method: "POST", headers: { ...auth, "content-type": "application/json" }, body: "{" })).status, 400);
-    assert.equal(calls, 0);
-    const result = await fetch(url, { method: "POST", headers: { ...auth, "content-type": "application/json" }, body: "{}" });
-    assert.equal(await result.text(), "PARSED:2");
-    assert.equal(calls, 1);
-    assert.equal((await fetch(`${endpoint.url}/get`, { headers: auth })).status, 200);
-    assert.equal((await fetch(url, { headers: { ...auth, origin: "https://browser.invalid" } })).status, 400);
-    if (binding.ok) { binding.dispose(); binding.dispose(); }
-    assert.equal((await fetch(url, { method: "POST", headers: auth })).status, 404);
-  } finally { await server.close(); registry.close(); }
-});
 test("output split UTF-8, reservation cancellation, floods and full response budget", async () => {
   await temporary(async (dir) => {
     const output = new OutputStore(join(dir, "output.log"), { bytes: 0 });
@@ -251,12 +213,11 @@ test("output split UTF-8, reservation cancellation, floods and full response bud
     assert.ok(result.omitted > 0);
     assert.ok(Buffer.byteLength(result.output) <= 44 * 1024);
     const response = formatResult({
-      ...result, yielded: false, capabilities: false, wall_ms: 100,
+      ...result, yielded: false, wall_ms: 100,
       job: { id: 1, mode: "sandboxed", state: "exited", cmd: "test", cwd: dir, started: 0,
         stdinOpen: false, disclosed: true, unread: 0, exit_code: null, exit_signal: "SIGTERM" },
     });
     assert.match(response.content[0].text, /Process terminated by signal SIGTERM/);
-    assert.match(response.content[0].text, /Capabilities: unavailable/);
     assert.ok(Buffer.byteLength(response.content[0].text) <= 50 * 1024);
     assert.ok(!response.content[0].text.startsWith("{"));
     const manyLines = formatResult({ ...response.details, output: "x\n".repeat(2000), omitted: 0 });
@@ -268,7 +229,7 @@ test("output split UTF-8, reservation cancellation, floods and full response bud
     assert.equal(output.preview(), "x".repeat(4096));
   });
 });
-test("real compiled macOS executor: pipes, output, authorization, cancellation, revoke", { skip: process.platform !== "darwin", timeout: 60000 }, async () => {
+test("real compiled macOS executor: pipes, output, authorization, cancellation", { skip: process.platform !== "darwin", timeout: 60000 }, async () => {
   await temporary(async (dir) => {
     const client = new ExecutorClient("integration-test", process.execPath, () => {}, () => {});
     const launch = async (cmd: string, stdin = false, mode = "use_default") => prepareLaunch({
@@ -329,7 +290,6 @@ test("real compiled macOS executor: pipes, output, authorization, cancellation, 
       await assert.rejects(poll, /cancelled/);
       assert.equal((await client.request("list", { id: sleeper.job.id })).jobs[0].state, "running");
       await client.request("stop", { id: sleeper.job.id });
-      await client.request("revoke", {});
     } finally {
       const warnings = await client.close();
       assert.deepEqual(warnings, []);

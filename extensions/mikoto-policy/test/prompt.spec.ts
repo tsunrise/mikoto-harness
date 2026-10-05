@@ -3,14 +3,14 @@ import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { it, type TestContext } from "node:test";
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { BeforeAgentStartEvent, ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { MikotoPolicyDocument } from "mikoto-types";
 import { MikotoPolicyDocumentLoader } from "../src/config.ts";
 import { installPolicyPrompt } from "../src/prompt.ts";
 
 function capturePrompt(loader: MikotoPolicyDocumentLoader) {
   let active: string[] = [];
-  let handler!: (event: { systemPrompt: string }, ctx: ExtensionContext) => Promise<{ systemPrompt: string } | undefined>;
+  let handler!: (event: BeforeAgentStartEvent, ctx: ExtensionContext) => Promise<void>;
   installPolicyPrompt(loader, {
     getActiveTools: () => active,
     on(event: string, fn: typeof handler) {
@@ -19,7 +19,14 @@ function capturePrompt(loader: MikotoPolicyDocumentLoader) {
     },
   } as unknown as ExtensionAPI);
   return {
-    render: handler,
+    async render(input: { systemPrompt: string }, ctx: ExtensionContext) {
+      const event = { systemPromptOptions: { sections: {} } } as BeforeAgentStartEvent;
+      await handler(event, ctx);
+      const once = structuredClone(event.systemPromptOptions);
+      await handler(event, ctx);
+      assert.deepEqual(event.systemPromptOptions, once);
+      return { systemPrompt: `${input.systemPrompt}\n\n<permission>\n${once.sections.permission}\n</permission>` };
+    },
     setActiveTools(tools: string[]) { active = tools; },
   };
 }
@@ -62,7 +69,6 @@ it("chains the policy snapshot once, unchanged across modes and active tools", a
   const previous = "Chained previous instructions.\n\n<permission>Existing provider guidance.</permission>";
   const result = (await h.render({ systemPrompt: previous }, ctx))!;
   assert.ok(result.systemPrompt.startsWith(`${previous}\n\n`));
-  assert.equal(await h.render(result, ctx), undefined);
 
   const { document } = await loader.load(cwd, true);
   const before = structuredClone(document);

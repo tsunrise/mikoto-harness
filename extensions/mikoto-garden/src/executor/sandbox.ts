@@ -9,7 +9,6 @@ export class Sandbox {
   private queue: Promise<unknown> = Promise.resolve();
   private alive = false;
   private closed = false;
-  private endpoint: { port: number } | undefined;
   private readonly policy: MikotoPolicyDocument;
   private readonly control: string;
   private readonly scratch: string;
@@ -17,9 +16,7 @@ export class Sandbox {
     policy: MikotoPolicyDocument,
     control: string,
     scratch: string,
-    endpoint?: { port: number },
   ) {
-    this.endpoint = endpoint;
     this.policy = policy;
     this.control = control;
     this.scratch = scratch;
@@ -53,7 +50,7 @@ export class Sandbox {
         },
         async ({ host, port }) =>
           typeof port === "number" &&
-          evaluateDestination(this.policy.network, this.endpoint, host, port, this.alive),
+          evaluateDestination(this.policy.network, host, port, this.alive),
         false,
       );
       if (this.closed) throw new Error("Sandbox initialization cancelled");
@@ -86,9 +83,6 @@ export class Sandbox {
       }
       return compiled.diagnostics;
     });
-  }
-  revoke(): void {
-    this.endpoint = undefined;
   }
   async checkReady(): Promise<void> {
     if (!this.alive) throw new Error("Sandbox unavailable");

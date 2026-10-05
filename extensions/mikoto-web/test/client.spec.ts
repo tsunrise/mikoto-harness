@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { search, searchSessionId, searchModel, parseResult, readResponse } from "../src/client.ts";
-import { errorResponse } from "../src/errors.ts";
+import { WebError } from "../src/errors.ts";
 
 const request = () => ({
   sessionId: "session", model: "gpt-active",
@@ -26,7 +26,7 @@ test("sends only commands/session/model and returns only output plus opaque resu
     });
     return Response.json({ output, results, encrypted_output: "secret", provider: "secret", headers: "secret" });
   } });
-  assert.deepEqual(JSON.parse(body), { output, results });
+  assert.deepEqual(body, { output, results });
 });
 
 test("normalizes optional results but rejects invalid envelopes", () => {
@@ -48,9 +48,9 @@ test("stable provider-separated session IDs and model selection", () => {
 });
 
 test("safe HTTP errors cancel bodies and never retry", async () => {
-  for (const [status, code, local] of [
-    [401, "upstream_auth_error", 502], [403, "upstream_auth_error", 502],
-    [429, "rate_limited", 429], [500, "upstream_error", 502], [302, "upstream_error", 502],
+  for (const [status, code] of [
+    [401, "upstream_auth_error"], [403, "upstream_auth_error"],
+    [429, "rate_limited"], [500, "upstream_error"], [302, "upstream_error"],
   ] as const) {
     let canceled = false;
     let calls = 0;
@@ -58,17 +58,16 @@ test("safe HTTP errors cancel bodies and never retry", async () => {
       calls++;
       return new Response(new ReadableStream({ cancel() { canceled = true; } }), { status });
     } }), (error: unknown) => {
-      const response = errorResponse(error);
-      assert.equal(response.status, local);
-      assert.equal(JSON.parse(response.body).error.code, code);
-      assert.equal(JSON.parse(response.body).error.upstream_status, status);
+      assert.ok(error instanceof WebError);
+      assert.equal(error.code, code);
+      assert.equal(error.upstreamStatus, status);
       return true;
     });
     assert.equal(calls, 1);
     assert.equal(canceled, true);
   }
   await assert.rejects(search(request(), { fetch: async () => { throw new Error("credential-canary"); } }),
-    (error: unknown) => !errorResponse(error).body.includes("credential-canary"));
+    (error: unknown) => error instanceof WebError && !error.message.includes("credential-canary"));
 });
 
 test("bounded decompressed bytes, fatal UTF-8, outgoing normalization size and cancellation", async () => {

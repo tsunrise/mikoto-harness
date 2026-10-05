@@ -1,5 +1,6 @@
 import { domainToASCII } from "node:url";
 import { z } from "zod";
+import { Type } from "typebox";
 
 // Protocol reference: OpenAI Codex, codex-rs/codex-api/src/search.rs.
 // We expose only the commands we support, not the endpoint's full request.
@@ -57,3 +58,9 @@ export const commandsSchema = z.strictObject({
 }, "Supply between one and sixteen operations");
 
 export type Commands = z.output<typeof commandsSchema>;
+
+// The input projection represents defaults/transforms as their accepted input,
+// while execute() applies the same schema's normalization and cross-field rules.
+export const parameters = Type.Unsafe<z.input<typeof commandsSchema>>(
+  z.toJSONSchema(commandsSchema, { io: "input" }),
+);

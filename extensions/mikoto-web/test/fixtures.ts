@@ -1,8 +1,6 @@
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import type { MikotoGardenBindEvent } from "mikoto-types";
+import type { ExtensionAPI, ExtensionToolContext, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { registerWeb } from "../src/index.ts";
 import type { AuthRegistry } from "../src/auth.ts";
-import type { Commands } from "../src/schema.ts";
 import type { Fetch } from "../src/client.ts";
 
 export const jwt = (id = "account-canary") =>
@@ -29,26 +27,17 @@ export function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-export function fixture(options: {
-  fetch?: Fetch;
-  emit?: (event: MikotoGardenBindEvent<Commands>) => void;
-  timeoutMs?: number;
-} = {}) {
+export function fixture(options: { fetch?: Fetch; timeoutMs?: number } = {}) {
   const handlers = new Map<string, (...args: any[]) => any>();
   const auth = registry();
   const notices: unknown[] = [];
-  const bindings: MikotoGardenBindEvent<Commands>[] = [];
-  const disposed: number[] = [];
+  const tools: ToolDefinition[] = [];
+  const active = ["codemode", "read"];
   const pi = {
     on(name: string, handler: (...args: any[]) => any) { handlers.set(name, handler); },
-    events: {
-      emit(_name: string, value: unknown) {
-        const event = value as MikotoGardenBindEvent<Commands>;
-        const index = bindings.push(event);
-        if (options.emit) options.emit(event);
-        else event.callback?.({ ok: true, bindingId: `binding-${index}`, dispose: () => { disposed.push(index); } });
-      },
-    },
+    registerTool(tool: ToolDefinition) { tools.push(tool); },
+    getActiveTools() { return [...active]; },
+    setActiveTools() { assertNever(); },
   } as unknown as ExtensionAPI;
   const ctx = {
     modelRegistry: auth.auth,
@@ -56,28 +45,25 @@ export function fixture(options: {
     sessionManager: { getSessionId: () => "session-one" },
     hasUI: true,
     ui: { notify: (...args: unknown[]) => { notices.push(args); } },
-  } as unknown as ExtensionContext;
+  } as unknown as ExtensionToolContext;
   registerWeb(pi, {
     fetch: options.fetch ?? (async () => Response.json({ output: "test", results: [] })),
     timeoutMs: options.timeoutMs,
-    bindTimeoutMs: 10,
   });
   return {
-    ...auth, ctx, bindings, notices, disposed,
+    ...auth, ctx, tools, notices, active,
     async start() { await handlers.get("session_start")!({}, ctx); },
     stop() { handlers.get("session_shutdown")!({}, ctx); },
     tree() { handlers.get("session_tree")!({}, ctx); },
-    model(provider: string, id: string) { handlers.get("model_select")!({ model: { provider, id } }, ctx); },
+    model(provider: string, id: string) {
+      ctx.model = { ...ctx.model, provider, id } as typeof ctx.model;
+    },
+    call(signal?: AbortSignal, args: unknown = { search_query: [{ q: "test" }] }) {
+      return tools[0].execute("fixture", args as any, signal, undefined, ctx);
+    },
   };
 }
 
-export function call(
-  binding: MikotoGardenBindEvent<Commands>,
-  signal = new AbortController().signal,
-) {
-  return binding.handler({
-    method: "POST", path: "/web/run", headers: {},
-    body: { search_query: [{ q: "test" }], response_length: "medium" },
-    signal,
-  });
+function assertNever(): never {
+  throw new Error("Web must not change the active tool set");
 }

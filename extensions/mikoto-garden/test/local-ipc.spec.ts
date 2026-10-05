@@ -44,7 +44,7 @@ test("policy grants direct loopback TCP and listed unix sockets only when config
     const prepared = await prepareLaunch({
       cmd: `${shellQuote(process.execPath)} -e ${shellQuote(script)}`,
       login: false, stdin: false, sandbox_permissions: "use_default",
-    }, dir, { PI_SESSION_ID: "test" }, undefined);
+    }, dir, { PI_SESSION_ID: "test" });
     const result = await client.request("spawn", { launch: prepared, wait: 5000, tokens: 1000 }, 10000) as Delivery;
     await client.request("ack", { id: result.job.id, chunk: result.chunk });
     return result.job.exit_code === 0;

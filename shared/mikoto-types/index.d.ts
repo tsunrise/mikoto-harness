@@ -152,52 +152,11 @@ export type MikotoPolicyEscalateEvent = {
   readonly callback: (result: MikotoEscalationResult) => void | Promise<void>;
 };
 
-/** Structural public Zod 4 slice; producers supply a live Zod schema. */
-export type MikotoGardenBodySchema<Body = unknown> = {
-  safeParseAsync(input: unknown): Promise<
-    | { readonly success: true; readonly data: Body }
-    | { readonly success: false; readonly error: unknown }
-  >;
-};
-
-export type MikotoGardenCapabilityRequest<Body = unknown> = {
-  readonly method: "GET" | "POST";
-  readonly path: `/${string}`;
-  readonly headers: Readonly<Record<string, string>>;
-  readonly body: Body;
-  readonly signal: AbortSignal;
-};
-
-export type MikotoGardenCapabilityResponse = {
-  readonly status: number;
-  readonly body?: string;
-  readonly headers?: Readonly<Record<string, string>>;
-};
-
-export type MikotoGardenBindResult =
-  | { readonly ok: true; readonly bindingId: string; readonly dispose: () => void }
-  | { readonly ok: false; readonly reason: string };
-
-export type MikotoGardenBindEvent<Body = unknown> = {
-  readonly owner: string;
-  readonly method: "GET" | "POST";
-  readonly path: `/${string}`;
-  /** POST defaults to JSON. GET accepts no body. */
-  readonly bodyFormat?: "json" | "text";
-  readonly bodySchema: MikotoGardenBodySchema<Body>;
-  readonly handler: (
-    request: MikotoGardenCapabilityRequest<NoInfer<Body>>,
-  ) => Promise<MikotoGardenCapabilityResponse>;
-  /** One healthy receiver acknowledges once; callbacks may throw. */
-  readonly callback?: (result: MikotoGardenBindResult) => void;
-};
-
 /** Compile-time source of truth for Mikoto inter-extension event channels. */
 export type MikotoEventMap = {
 	readonly "mikoto-sound:sound": MikotoSoundEvent;
   readonly "mikoto-policy:get-policy": MikotoPolicyGetPolicyEvent;
   readonly "mikoto-policy:escalate": MikotoPolicyEscalateEvent;
-  readonly "mikoto-garden:bind": MikotoGardenBindEvent;
 };
 
 export type MikotoEventName = keyof MikotoEventMap;
@@ -214,8 +173,7 @@ export type MikotoEventPayload<Name extends MikotoEventName> =
  * signals.
  */
 export type MikotoEventEmitter = {
-  emit<Body>(channel: "mikoto-garden:bind", data: MikotoGardenBindEvent<Body>): void;
-	emit<Name extends Exclude<MikotoEventName, "mikoto-garden:bind">>(
+	emit<Name extends MikotoEventName>(
 		channel: Name,
 		data: MikotoEventPayload<Name>,
 	): void;

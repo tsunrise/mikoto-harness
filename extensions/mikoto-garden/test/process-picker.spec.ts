@@ -108,9 +108,9 @@ test("picker failure/expired ID is inert and does not leak executor exception de
 
 test("review actions preserve exact inputs without leaking launch secrets", () => {
   const launch = { cmd: "\nprintf hi\u001b[31m", cwd: "/test", shell: "/bin/sh",
-    login: false, stdin: false, mode: "unsandboxed", capabilities: true,
+    login: false, stdin: false, mode: "unsandboxed",
     cwdIdentity: "1:2", shellIdentity: "3:4", env: { PATH: "/bin", HOME: "/user", LANG: "C", TERM: "dumb",
-      GARDEN_TOKEN: "private-token", GARDEN_SERVER: "private-endpoint" } } as Launch;
+      OPENAI_API_KEY: "private-token", HTTPS_PROXY: "private-endpoint" } } as Launch;
   const action = launchAction(launch);
   assert.deepEqual(action.input, { cmd: launch.cmd, cwd: launch.cwd, shell: launch.shell,
     login: false, stdin: false, mode: "unsandboxed" });

@@ -45,7 +45,7 @@ export function launchAction(launch: Launch): MikotoEscalationAction {
     toolName: "exec_command",
     input: { cmd: launch.cmd, cwd: launch.cwd, shell: launch.shell,
       login: launch.login, stdin: launch.stdin, mode: launch.mode },
-    context: { capabilities: launch.capabilities, cwdIdentity: launch.cwdIdentity,
+    context: { cwdIdentity: launch.cwdIdentity,
       shellIdentity: launch.shellIdentity, PATH: launch.env.PATH,
       HOME: launch.env.HOME, LANG: launch.env.LANG, TERM: launch.env.TERM,
       transport: "pipes", proxyEnvironment: "cleared", scratch: "runtime-managed TMPDIR" },

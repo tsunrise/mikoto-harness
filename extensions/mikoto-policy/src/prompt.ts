@@ -4,7 +4,7 @@ import type { MikotoPolicyDocumentLoader } from "./config.ts";
 
 const POLICY_GUIDANCE = `Filesystem: Reads are allowed by default; the most specific allowRead or denyRead match wins, and allowRead wins ties. Writes require allowWrite, and denyWrite always wins.
 
-Network: Access is denied by default; allowedDomains grants matching destinations unless deniedDomains matches. allowLocalBinding permits direct connections to any localhost TCP port and local listening; otherwise Garden's exact live capability endpoint is the only localhost exception. allowUnixSockets lists the only Unix sockets commands may connect to. The web capability runs host-side behind that endpoint, so web search and page fetches are exempt from network restrictions.`;
+Network: These rules govern sandboxed shell commands. Access is denied by default; allowedDomains grants matching destinations unless deniedDomains matches. allowLocalBinding permits direct connections to any localhost TCP port and local listening. allowUnixSockets lists the only Unix sockets commands may connect to. Host-side Pi tools, including web and MCP, run outside this shell sandbox; do not use them to bypass a denial.`;
 
 const ESCALATION_GUIDANCE =
   "Each escalation requires manual user action, so repeated requests are disruptive. Keep escalation infrequent by working within the policy whenever possible. Tools without an explicit escalation parameter automatically escalate policy violations.";
@@ -18,9 +18,7 @@ export function installPolicyPrompt(
     // or policy changes must update the prompt; mode, UI availability, and tool
     // activation must not. In particular, do not inspect ctx.mode/hasUI here.
     const { document } = await loader.load(ctx.cwd, ctx.isProjectTrusted());
-    const prompt = renderPolicyPrompt(document);
-    if (event.systemPrompt.includes(prompt)) return;
-    return { systemPrompt: `${event.systemPrompt}\n\n${prompt}` };
+    event.systemPromptOptions.sections.permission = renderPolicyPrompt(document);
   });
 }
 
@@ -52,8 +50,7 @@ function renderPolicyPrompt(document: MikotoPolicyDocument): string {
     .replaceAll(">", "\\u003e")
     .replaceAll("\ufffe", "\\ufffe")
     .replaceAll("\uffff", "\\uffff");
-  return `<permission>
-<snapshot format="json">
+  return `<snapshot format="json">
 ${snapshot}
 </snapshot>
 <rules>
@@ -61,6 +58,5 @@ ${POLICY_GUIDANCE}
 </rules>
 <escalation>
 ${ESCALATION_GUIDANCE}
-</escalation>
-</permission>`;
+</escalation>`;
 }

@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import type { MikotoPolicyDocument } from "mikoto-types";
 import type { Launch, SandboxMode } from "./launch.ts";
 
-export const CONTRACT = "garden-pipes-2";
+export const CONTRACT = "garden-pipes-3";
 export const MAX_IPC_BYTES = 512 * 1024;
 export const JOB_LIMITS = Object.freeze({ live: 64, outstanding: 128 });
 export type InputOperation = Readonly<{
@@ -35,14 +35,12 @@ export type Delivery = {
   logCapped: boolean;
   wall_ms: number;
   yielded: boolean;
-  capabilities: boolean;
   request?: number;
 };
 export type Requests = {
   init: {
     contract: string;
     policy: MikotoPolicyDocument;
-    endpoint?: { port: number };
     runtimeParent: string;
   };
   preflight: Record<string, never>;
@@ -52,7 +50,6 @@ export type Requests = {
   cancel: { request: number };
   list: { id?: number };
   stop: { id?: number; all?: boolean };
-  revoke: Record<string, never>;
   shutdown: Record<string, never>;
 };
 export type Responses = {
@@ -64,7 +61,6 @@ export type Responses = {
   cancel: null;
   list: { jobs: Job[]; tail?: string };
   stop: { warnings: string[] };
-  revoke: null;
   shutdown: { warnings: string[] };
 };
 export type Request<Name extends keyof Requests = keyof Requests> = {

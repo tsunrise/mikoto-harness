@@ -1,14 +1,13 @@
 {
   "name": "mikoto-garden",
   "version": "0.1.0",
-  "description": "Mikoto Garden: macOS sandboxed commands and authenticated host capabilities.",
+  "description": "Mikoto Garden: macOS sandboxed managed commands.",
   "type": "module",
   "license": "MIT",
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
-    "check": "tsc --noEmit && node --check test/gate-1.mjs",
+    "build": "node scripts/clean-build.mjs && tsc -p tsconfig.build.json",
+    "check": "tsc --noEmit",
     "test": "node --test test/*.spec.ts",
-    "test:gate-1": "node test/gate-1.mjs",
     "validate": "npm run build && npm run check && npm test",
     "prepack": "npm run build"
   },
@@ -23,15 +22,25 @@
     "typebox": "*"
   },
   "devDependencies": {
-    "@earendil-works/pi-coding-agent": "0.85.1",
-    "@earendil-works/pi-ai": "0.85.1",
-    "@earendil-works/pi-tui": "0.85.1",
+    "@earendil-works/pi-coding-agent": "1.0.2",
+    "@earendil-works/pi-ai": "1.0.2",
+    "@earendil-works/pi-tui": "1.0.2",
     "@types/node": "^24.0.0",
     "mikoto-types": "^0.1.0",
     "typescript": "^5.9.0"
   },
-  "files": ["index.ts", "src", "dist", "skills", "README.md", "VALIDATION.md", "examples"],
-  "pi": { "extensions": ["./index.ts"], "skills": ["./skills"] },
+  "files": [
+    "index.ts",
+    "src",
+    "scripts",
+    "dist",
+    "README.md"
+  ],
+  "pi": {
+    "extensions": [
+      "./index.ts"
+    ]
+  },
   "engines": {
     "node": ">=26"
   }

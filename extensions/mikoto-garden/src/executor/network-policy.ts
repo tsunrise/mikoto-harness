@@ -29,7 +29,6 @@ export function matchesDestination(rule: string, host: string, port: number): bo
 }
 export function evaluateDestination(
   network: MikotoPolicyDocument["network"],
-  endpoint: { port: number } | undefined,
   host: string,
   port: number,
   alive = true,
@@ -37,7 +36,6 @@ export function evaluateDestination(
   try {
     const target = destination(host, port);
     if (!alive || !target) return false;
-    if (target.host === "127.0.0.1" && target.port === endpoint?.port) return true;
     if (network.deniedDomains.some((rule) => matchesDestination(rule, target.host, port)))
       return false;
     return network.allowedDomains.some((rule) => matchesDestination(rule, target.host, port));

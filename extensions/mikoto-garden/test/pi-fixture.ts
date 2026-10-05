@@ -1,6 +1,6 @@
 // Explicitly loaded only for real Pi smoke tests; no production integration.
 import assert from "node:assert/strict";
-import type { ExtensionAPI, ToolDefinition } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionToolContext, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import garden from "../src/index.ts";
 import type { Delivery } from "../src/protocol.ts";
 
@@ -35,6 +35,9 @@ export default function fixture(pi: ExtensionAPI): void {
       pi.registerTool(definition);
     },
   });
+  pi.on("session_start", () => {
+    process.stderr.write("\nGARDEN_READY\n");
+  });
   pi.registerCommand("garden-smoke", {
     description: "Garden integration fixture (no model request)",
     async handler(_args, ctx) {
@@ -43,23 +46,14 @@ export default function fixture(pi: ExtensionAPI): void {
       const input = tools.get("write_stdin")!;
       const first = await exec.execute("smoke-start", {
         cmd: "printf 'line1\\n\"quote\"\\\\backslash'; /bin/cat", stdin: true, login: false, yield_time_ms: 0,
-      }, undefined, undefined, ctx);
+      }, undefined, undefined, ctx as unknown as ExtensionToolContext);
       const text = first.content[0];
       assert.equal(text.type, "text");
       assert.match(text.type === "text" ? text.text : "", /Sandbox mode: sandboxed/);
       assert.equal((first.details as Delivery).yielded, true);
       const id = (first.details as { job: { id: number } }).job.id;
-      const done = await input.execute("smoke-eof", { session_id: id, close_stdin: true }, undefined, undefined, ctx);
+      const done = await input.execute("smoke-eof", { session_id: id, close_stdin: true }, undefined, undefined, ctx as unknown as ExtensionToolContext);
       assert.match(done.content[0].type === "text" ? done.content[0].text : "", /Process exited with code 0/);
-      const notification = await exec.execute("smoke-capability", {
-        // Exercise the capability itself, not a shell-function name or code
-        // block extracted from the skill's changeable explanatory examples.
-        cmd: 'curl --disable --silent --show-error --fail --max-time 5 ' +
-          '--header "Authorization: Bearer $GARDEN_TOKEN" ' +
-          '--data-binary GARDEN_CAPABILITY_OK "$GARDEN_SERVER/update"',
-        login: false,
-      }, undefined, undefined, ctx);
-      assert.match(notification.content[0].type === "text" ? notification.content[0].text : "", /Process exited with code 0/);
       ctx.ui.notify(`GARDEN_SMOKE_OK active=${pi.getActiveTools().join(",")}`, "info");
     },
   });
@@ -71,7 +65,7 @@ export default function fixture(pi: ExtensionAPI): void {
         const result = await tools.get("exec_command")!.execute("smoke-escalation", {
           cmd: "true", login: false, sandbox_permissions: "require_escalated",
           justification: "Verify the Garden integration with the existing Policy broker using a no-op command.",
-        }, undefined, undefined, ctx);
+        }, undefined, undefined, ctx as unknown as ExtensionToolContext);
         const details = result.details as Delivery;
         assert.equal(details.job.mode, "unsandboxed");
         assert.equal(details.job.exit_code, 0);
@@ -86,7 +80,7 @@ export default function fixture(pi: ExtensionAPI): void {
         assert.ok(pickerId);
         const result = await tools.get("write_stdin")!.execute("smoke-picker-check", {
           session_id: pickerId, yield_time_ms: 250,
-        }, undefined, undefined, ctx);
+        }, undefined, undefined, ctx as unknown as ExtensionToolContext);
         const details = result.details as Delivery;
         assert.equal(details.yielded, false, "The picker must actually stop the reader");
         assert.equal(details.job.id, pickerId);
@@ -95,7 +89,7 @@ export default function fixture(pi: ExtensionAPI): void {
       }
       const result = await tools.get("exec_command")!.execute("smoke-picker", {
         cmd: "printf PICKER_PREVIEW; /bin/cat", stdin: true, login: false, yield_time_ms: 250,
-      }, undefined, undefined, ctx);
+      }, undefined, undefined, ctx as unknown as ExtensionToolContext);
       pickerId = (result.details as Delivery).job.id;
       ctx.ui.notify("GARDEN_PICKER_READY", "info");
     },

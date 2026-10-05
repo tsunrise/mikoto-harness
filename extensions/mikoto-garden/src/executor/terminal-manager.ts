@@ -84,7 +84,6 @@ export class TerminalManager {
     data: Requests["spawn"],
     request: number,
     signal: AbortSignal,
-    assertCurrent: () => void = () => {},
   ): Promise<Delivery> {
     if (this.closing) throw new Error("Generation closing");
     if (
@@ -113,11 +112,9 @@ export class TerminalManager {
         launch.mode === "sandboxed" ? await this.sandbox.wrap(launch) : undefined;
       cleanup = wrapped?.cleanup ?? cleanup;
       signal.throwIfAborted();
-      assertCurrent();
       if (this.closing) throw new Error("Generation closing");
       await assertLaunchIdentity(launch);
       signal.throwIfAborted();
-      assertCurrent();
       const id = this.allocateId();
       output = new OutputStore(join(this.logs, `${id}.log`), this.quota);
       const job: Job = {
@@ -163,7 +160,6 @@ export class TerminalManager {
         data.tokens,
         request,
         signal,
-        launch.capabilities,
       );
     } catch (error) {
       if (!entry.job.disclosed) await entry.process.stop();
@@ -174,7 +170,6 @@ export class TerminalManager {
     data: Requests["input"],
     request: number,
     signal: AbortSignal,
-    capabilities: boolean,
   ): Promise<Delivery> {
     const entry = this.get(data.id);
     // Until exec_command's own delivery is ACKed, its ID has not been returned
@@ -211,7 +206,6 @@ export class TerminalManager {
         data.tokens,
         request,
         signal,
-        capabilities,
         unlock,
       );
     } catch (error) {
@@ -225,7 +219,6 @@ export class TerminalManager {
     tokens: number,
     request: number,
     signal: AbortSignal,
-    capabilities: boolean,
     release?: () => void,
   ): Promise<Delivery> {
     const started = Date.now();
@@ -239,7 +232,6 @@ export class TerminalManager {
         logCapped: false,
         wall_ms: Date.now() - started,
         yielded: false,
-        capabilities,
       });
     }, 250);
     const waitLifetime = new AbortController();
@@ -269,7 +261,6 @@ export class TerminalManager {
       job: this.snapshot(entry),
       wall_ms: Date.now() - started,
       yielded: !entry.process.exited,
-      capabilities,
       request,
     };
   }

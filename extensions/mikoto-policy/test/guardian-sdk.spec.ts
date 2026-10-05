@@ -11,7 +11,7 @@ import {
   createAgentSession, DefaultResourceLoader, ModelRuntime, SessionManager, SettingsManager,
 } from "@earendil-works/pi-coding-agent";
 
-it("real Pi 0.87.1 registry and Apply Patch execute only the reviewed operation, with no parent entries", async () => {
+it("real Pi registry and Apply Patch execute only the reviewed operation, with no parent entries", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "guardian-sdk-"));
   const agentDir = join(cwd, "agent");
   await mkdir(agentDir);
